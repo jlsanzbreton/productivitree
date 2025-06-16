@@ -15,12 +15,12 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
     passionTestResult,
     currentUser,
     setCurrentUser,
-    roots, setRoots, // roots is read here but setRoots is used
+    setRoots,
     activeBackground, setActiveBackground,
     activeTreeTheme, setActiveTreeTheme,
-    currentTasks, setCurrentTasks,
+    setCurrentTasks,
     // Nuevo: para gestión de experiencia
-    experienceAreas, setExperienceAreas,
+    experienceAreas,
     analyzeExperience
   } = useContext(AppContext) as AppContextType;
 
@@ -101,9 +101,14 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
         setCurrentTasks(prevTasks => [...prevTasks, ...newTasksData]);
       }
       if (currentStepConfig.id === 'experience_mapping') {
-        // Nuevo: analizar la experiencia del usuario con IA
+        // Procesar experiencia con IA si hay texto
         if (experienceText.trim()) {
-          await analyzeExperience(experienceText);
+          try {
+            await analyzeExperience(experienceText);
+          } catch (error) {
+            console.error('Error analyzing experience:', error);
+            // Continuar aunque haya error - el usuario puede continuar sin análisis de IA
+          }
         }
       }
       setCurrentStepIndex(currentStepIndex + 1);

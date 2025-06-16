@@ -2,7 +2,7 @@ console.log('APPCONTEXT.TSX: Script start');
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 import { User, RootData, ProjectData, TaskData, AchievementData, TreeNode, LeafStatus, PassionTestResult, ExperienceArea } from '../types';
 // Ensure all necessary constants are imported, especially GEMINI_TEXT_MODEL for runPassionTest
-import { DEFAULT_USER_ID, INITIAL_TREE_DATA, backgroundThemes, GEMINI_TEXT_MODEL, leafColors } from '../constants'; 
+import { DEFAULT_USER_ID, INITIAL_TREE_DATA, GEMINI_TEXT_MODEL } from '../constants'; 
 import { GoogleGenAI } from '@google/genai'; // Ensure this import is present
 
 export interface AppContextType {

@@ -26,7 +26,6 @@ const PassionTest: React.FC<{ onComplete?: () => void }> = ({ onComplete }) => {
     setPassionTestResult, 
     currentUser, 
     setCurrentUser,
-    setRoots, // To update roots based on suggestions
     setShowPassionTest
   } = useContext(AppContext) as AppContextType;
 

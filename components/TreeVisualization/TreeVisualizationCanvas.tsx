@@ -1,14 +1,194 @@
 
-import React, { useRef, useEffect, useContext } from 'react';
-import * as d3 from 'd3';
-import { TreeNode, TaskData, LeafStatus, AchievementData } from '../../types';
-import { leafColors, fruitColors } from '../../constants';
+import React, { useRef, useEffect, useContext, useState, useCallback } from 'react';
+import { TreeNode, TaskData, LeafStatus } from '../../types';
 import { AppContext, AppContextType } from '../../contexts/AppContext';
+import OrganicTreeLayout, { OrganicTreeConfig, OrganicNode, OrganicLayoutResult } from './OrganicTreeLayout';
 
+interface OrganicRenderConfig {
+  canvas: HTMLCanvasElement;
+  theme: string;
+  showRoots?: boolean;
+  showTrunkSections?: boolean;
+  enableAnimations?: boolean;
+  healthFactor: number;
+}
+
+interface OrganicInteractionCallbacks {
+  onLeafClick: (nodeId: string) => void;
+  onRootHover: () => void;
+  onTrunkSectionHover: () => void;
+}
+
+// Organic Tree Renderer integrado
+class IntegratedOrganicTreeRenderer {
+  private config: OrganicRenderConfig;
+  private context: CanvasRenderingContext2D | null = null;
+
+  constructor(config: OrganicRenderConfig) {
+    this.config = config;
+    this.context = config.canvas.getContext('2d');
+  }
+
+  public updateConfig(newConfig: Partial<OrganicRenderConfig>): void {
+    this.config = { ...this.config, ...newConfig };
+    if (newConfig.canvas) {
+      this.context = newConfig.canvas.getContext('2d');
+    }
+  }
+
+  public render(layout: OrganicLayoutResult, _callbacks: OrganicInteractionCallbacks): void {
+    if (!this.context) return;
+
+    const { width, height } = this.config.canvas;
+    this.context.clearRect(0, 0, width, height);
+
+    this.renderRoots(layout.nodes.filter(n => n.type === 'root'));
+    this.renderTrunkSections(layout.nodes.filter(n => n.type === 'trunk'));
+    this.renderBranches(layout.nodes.filter(n => n.type === 'branch'));
+    this.renderLeaves(layout.nodes.filter(n => n.type === 'leaf'));
+  }
+
+  private renderRoots(rootNodes: OrganicNode[]): void {
+    if (!this.context || !this.config.showRoots) return;
+
+    rootNodes.forEach(root => {
+      this.context!.strokeStyle = root.color || '#8B4513';
+      this.context!.lineWidth = root.thickness || 3;
+      
+      if (root.curve) {
+        this.context!.beginPath();
+        this.context!.moveTo(root.x, root.y);
+        this.context!.bezierCurveTo(
+          root.curve.cp1x, root.curve.cp1y,
+          root.curve.cp2x, root.curve.cp2y,
+          root.x, root.y
+        );
+        this.context!.stroke();
+      }
+
+      this.context!.fillStyle = root.color || '#8B4513';
+      this.context!.beginPath();
+      this.context!.arc(root.x, root.y, root.size / 2, 0, Math.PI * 2);
+      this.context!.fill();
+    });
+  }
+
+  private renderTrunkSections(trunkNodes: OrganicNode[]): void {
+    if (!this.context || !this.config.showTrunkSections) return;
+
+    const sortedTrunk = trunkNodes.sort((a, b) => b.y - a.y);
+
+    for (let i = 0; i < sortedTrunk.length; i++) {
+      const section = sortedTrunk[i];
+      const nextSection = sortedTrunk[i + 1];
+
+      this.context!.fillStyle = section.color || '#8B4513';
+      
+      if (nextSection) {
+        this.context!.beginPath();
+        this.context!.moveTo(section.x - section.size / 2, section.y);
+        this.context!.lineTo(section.x + section.size / 2, section.y);
+        this.context!.lineTo(nextSection.x + nextSection.size / 2, nextSection.y);
+        this.context!.lineTo(nextSection.x - nextSection.size / 2, nextSection.y);
+        this.context!.closePath();
+        this.context!.fill();
+      } else {
+        this.context!.beginPath();
+        this.context!.arc(section.x, section.y, section.size / 2, 0, Math.PI * 2);
+        this.context!.fill();
+      }
+    }
+  }
+
+  private renderBranches(branchNodes: OrganicNode[]): void {
+    if (!this.context) return;
+
+    branchNodes.forEach(branch => {
+      this.context!.strokeStyle = branch.color || '#228B22';
+      this.context!.lineWidth = branch.thickness || 5;
+      this.context!.lineCap = 'round';
+
+      if (branch.curve) {
+        this.context!.beginPath();
+        this.context!.moveTo(branch.x, branch.y);
+        this.context!.bezierCurveTo(
+          branch.curve.cp1x, branch.curve.cp1y,
+          branch.curve.cp2x, branch.curve.cp2y,
+          branch.x, branch.y
+        );
+        this.context!.stroke();
+      }
+
+      this.context!.fillStyle = branch.color || '#228B22';
+      this.context!.beginPath();
+      this.context!.arc(branch.x, branch.y, branch.size / 2, 0, Math.PI * 2);
+      this.context!.fill();
+    });
+  }
+
+  private renderLeaves(leafNodes: OrganicNode[]): void {
+    if (!this.context) return;
+
+    leafNodes.forEach(leaf => {
+      const taskData = leaf.data as TaskData;
+      
+      let leafColor = this.getLeafColor(taskData.status);
+      
+      if (this.config.theme === 'winter') {
+        leafColor = 'rgba(255, 255, 255, 0.3)';
+      }
+
+      this.context!.fillStyle = leafColor;
+      this.drawLeafShape(leaf);
+    });
+  }
+
+  private drawLeafShape(leaf: OrganicNode): void {
+    if (!this.context) return;
+
+    const size = leaf.size;
+    const angle = leaf.angle || 0;
+
+    this.context!.save();
+    this.context!.translate(leaf.x, leaf.y);
+    this.context!.rotate(angle);
+
+    this.context!.beginPath();
+    this.context!.ellipse(0, 0, size * 1.5, size, 0, 0, Math.PI * 2);
+    this.context!.fill();
+
+    this.context!.restore();
+  }
+
+  private getLeafColor(status: LeafStatus): string {
+    const colorMap: Record<LeafStatus, string> = {
+      [LeafStatus.Pending]: '#14b8a6',
+      [LeafStatus.InProgress]: '#f59e0b',
+      [LeafStatus.Urgent]: '#ef4444',
+      [LeafStatus.Completed]: '#9ca3af',
+      [LeafStatus.RecentActivity]: '#84cc16'
+    };
+    
+    return colorMap[status] || '#9ca3af';
+  }
+
+  public renderGround(groundY: number): void {
+    if (!this.context) return;
+
+    const { width } = this.config.canvas;
+    
+    this.context!.strokeStyle = 'rgba(139, 69, 19, 0.3)';
+    this.context!.lineWidth = 2;
+    this.context!.beginPath();
+    this.context!.moveTo(0, groundY);
+    this.context!.lineTo(width, groundY);
+    this.context!.stroke();
+  }
+}
 
 interface TreeVisualizationCanvasProps {
   treeData: TreeNode;
-  onLeafClick: (nodeId: string) => void; // Semicolon added here
+  onLeafClick: (nodeId: string) => void;
   width?: number;
   height?: number;
 }
@@ -21,9 +201,44 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const { activeTreeTheme, treeHealth } = useContext(AppContext) as AppContextType;
+  const layoutRef = useRef<OrganicTreeLayout | null>(null);
+  const rendererRef = useRef<IntegratedOrganicTreeRenderer | null>(null);
+  
+  const { 
+    activeTreeTheme, 
+    treeHealth, 
+    experienceAreas, 
+    roots, 
+    currentTasks,
+    projects
+  } = useContext(AppContext) as AppContextType;
 
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [animationsEnabled, setAnimationsEnabled] = useState(false);
 
+  // Memoize callback to prevent unnecessary re-renders
+  const handleLeafClick = useCallback((nodeId: string) => {
+    onLeafClick(nodeId);
+  }, [onLeafClick]);
+
+  // Keyboard shortcut to toggle animations
+  useEffect(() => {
+    const handleKeyPress = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() === 'a') {
+        setAnimationsEnabled(prev => {
+          console.log(`Animations ${!prev ? 'enabled' : 'disabled'}`);
+          return !prev;
+        });
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, []);
+
+  // Setup canvas and initial render - only run when essential props change
   useEffect(() => {
     if (!canvasRef.current || !treeData || !containerRef.current) return;
 
@@ -37,180 +252,209 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
     const currentWidth = propWidth || containerWidth;
     const currentHeight = propHeight || containerHeight;
 
+    // Set up canvas for high DPI displays
     canvas.width = currentWidth * window.devicePixelRatio;
     canvas.height = currentHeight * window.devicePixelRatio;
     canvas.style.width = `${currentWidth}px`;
     canvas.style.height = `${currentHeight}px`;
     context.scale(window.devicePixelRatio, window.devicePixelRatio);
 
-    context.clearRect(0, 0, currentWidth, currentHeight);
+    // Initialize organic tree layout if not exists
+    if (!layoutRef.current) {
+      const layoutConfig: OrganicTreeConfig = {
+        width: currentWidth,
+        height: currentHeight,
+        rootDepth: 150,
+        trunkHeight: 200,
+        maxBranchLevels: 4,
+        branchingFactor: 0.7,
+        windStrength: 0.3,
+        seasonalEffects: activeTreeTheme === 'winter'
+      };
+      layoutRef.current = new OrganicTreeLayout(layoutConfig);
+    }
 
-    // Create a tree layout
-    const root = d3.hierarchy(treeData, d => d.children);
-    const treeLayout = d3.tree<TreeNode>().size([currentWidth * 0.9, currentHeight * 0.8]); // Use 90% of width, 80% of height
-    treeLayout(root);
+    // Initialize organic tree renderer if not exists
+    if (!rendererRef.current) {
+      const renderConfig: OrganicRenderConfig = {
+        canvas,
+        theme: activeTreeTheme,
+        showRoots: true,
+        showTrunkSections: true,
+        enableAnimations: true,
+        healthFactor: treeHealth / 100
+      };
+      rendererRef.current = new IntegratedOrganicTreeRenderer(renderConfig);
+    }
 
-    const healthFactor = treeHealth / 100; // 0 to 1
-
-    // Center the tree
-    const offsetX = currentWidth * 0.05; // Small margin
-    const offsetY = currentHeight * 0.1; // Margin from top for root
-
-    // Draw links (branches)
-    context.strokeStyle = `rgba(136, 103, 65, ${0.5 + healthFactor * 0.5})`; // Brownish, more vibrant with health
-    context.lineWidth = 2 * healthFactor + 1; // Thicker lines for healthier tree
-    
-    root.links().forEach(link => {
-      const source = link.source as d3.HierarchyPointNode<TreeNode>;
-      const target = link.target as d3.HierarchyPointNode<TreeNode>;
-      context.beginPath();
-      context.moveTo(source.x + offsetX, source.y + offsetY);
-      context.lineTo(target.x + offsetX, target.y + offsetY);
-      context.stroke();
+    // Update configuration when props change
+    layoutRef.current.updateConfig({
+      width: currentWidth,
+      height: currentHeight,
+      seasonalEffects: activeTreeTheme === 'winter',
+      windStrength: treeHealth > 80 ? 0.3 : 0.1
     });
 
-    // Draw nodes (trunk, leaves, fruits)
-    root.descendants().forEach(node => {
-      const cx = node.x + offsetX;
-      const cy = node.y + offsetY;
+    if (rendererRef.current) {
+      rendererRef.current.updateConfig({
+        canvas,
+        theme: activeTreeTheme,
+        healthFactor: treeHealth / 100
+      });
+    }
 
-      context.beginPath();
-      let nodeSize = node.data.size || 5;
-      nodeSize = nodeSize * (0.8 + healthFactor * 0.4); // Nodes slightly larger when healthy
-
-      let nodeColor = node.data.color || '#ccc'; // Default color
-
-      if (node.data.type === 'leaf') {
-        const task = node.data.data as TaskData;
-        const leafStyle = leafColors[task.status];
-        // For canvas, gradient is complex. Use a solid color representation or average.
-        // Example: using the 'from' color of the gradient.
-        if (leafStyle && leafStyle.gradient.includes('from-')) {
-            const fromColorMatch = leafStyle.gradient.match(/from-([a-z]+)-(\d+)/);
-            if (fromColorMatch) {
-                 // This is a simplification; direct Tailwind class to hex/rgb is not trivial
-                const colorMap: Record<string,string> = { teal: '#14b8a6', amber: '#f59e0b', red: '#ef4444', gray: '#9ca3af', lime: '#84cc16'};
-                nodeColor = colorMap[fromColorMatch[1]] || '#ccc';
-            }
-        } else {
-            nodeColor = '#9ca3af'; // Default completed/gray
-        }
-        context.fillStyle = nodeColor;
-        // Apply animation effect if status indicates
-        if (task.status === LeafStatus.RecentActivity || task.status === LeafStatus.Urgent || task.status === LeafStatus.InProgress) {
-          // Simulate pulse/sway by slightly varying size or position over time
-          // This requires a requestAnimationFrame loop, simplified here
-           const time = Date.now() / 1000; // time in seconds
-           if (task.status === LeafStatus.Urgent) {
-             nodeSize *= (1 + Math.sin(time * 5) * 0.1); // Pulsing size
-           } else if (task.status === LeafStatus.RecentActivity) {
-             // Swaying would involve minor x-offset changes
-             // context.arc(cx + Math.sin(time*2)*3, cy, nodeSize, 0, 2 * Math.PI);
-             // For simplicity, just draw a static leaf here
-           }
-        }
-
-        // Draw leaf shape (e.g., ellipse or actual leaf path)
-        context.ellipse(cx, cy, nodeSize * 1.5, nodeSize, Math.PI / 4, 0, 2 * Math.PI);
-
-      } else if (node.data.type === 'fruit') {
-        const achievement = node.data.data as AchievementData; // AchievementData
-        const fruitTypeKey = achievement.type as keyof typeof fruitColors;
-        nodeColor = fruitColors[fruitTypeKey] || '#ffcc00';
-        // Convert Tailwind text color to fill color for canvas
-        if(nodeColor.startsWith('text-')) {
-             const colorName = nodeColor.split('-')[1];
-             // const colorShade = nodeColor.split('-')[2]; // e.g., 500 (not used directly in map)
-             const colorMap: Record<string,string> = { green: '#22c55e', red: '#ef4444', amber: '#f59e0b'}; // Ensure these match your fruitColors definitions
-             context.fillStyle = colorMap[colorName] || '#ffcc00';
-        } else {
-            context.fillStyle = nodeColor;
-        }
-        context.arc(cx, cy, nodeSize, 0, 2 * Math.PI);
-
-      } else if (node.data.type === 'rootNode' || node.data.type === 'trunk' || node.data.type === 'branch') {
-         const baseColor = node.data.type === 'rootNode' || node.data.type === 'trunk' ? `101, 67, 33` : `136, 103, 65`; // Darker brown for trunk, lighter for branches
-         const baseAlpha = node.data.type === 'rootNode' || node.data.type === 'trunk' ? 0.7 : 0.6;
-        context.fillStyle = `rgba(${baseColor}, ${baseAlpha + healthFactor * 0.3})`;
-        
-        if(node.data.type === 'rootNode' || node.data.type === 'trunk'){
-            // A thicker representation for the root/trunk
-            context.rect(cx - nodeSize * 1.5, cy, nodeSize * 3, nodeSize * 2);
-        } else { // branch nodes (usually just connection points)
-            context.arc(cx, cy, nodeSize / 2, 0, 2 * Math.PI); // Smaller circle for branch joints
-        }
-      }
+    // Set up click handler for interactive elements
+    const handleCanvasClick = (event: MouseEvent) => {
+      if (!canvasRef.current || !layoutRef.current) return;
       
-      context.fill();
-      
-      // Add text label (optional, can make it cluttered)
-      // context.fillStyle = activeTreeTheme === 'dark' ? 'white' : 'black'; // This activeTreeTheme check needs context value
-      // context.font = '10px Arial';
-      // context.textAlign = 'center';
-      // context.fillText((node.data.data as any).name || node.data.id, cx, cy + nodeSize + 10);
-
-    });
-
-    // Handle click events on canvas to identify nodes
-    const clickHandler = (event: MouseEvent) => {
-      if (!canvasRef.current) return;
       const rect = canvasRef.current.getBoundingClientRect();
-      const x = (event.clientX - rect.left);
-      const y = (event.clientY - rect.top);
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
 
-      root.descendants().forEach(nodePoint => {
-        const dNode = nodePoint;
-        const nodeDrawX = dNode.x + offsetX;
-        const nodeDrawY = dNode.y + offsetY;
-        // Recalculate nodeDrawSize based on its type as it might differ (leaf vs fruit vs branch point)
-        let hitTestSize = (dNode.data.size || 5) * (0.8 + healthFactor * 0.4);
-        if (dNode.data.type === 'leaf') hitTestSize *= 1.5; // Ellipse major radius for leaves
-        else if (dNode.data.type === 'branch') hitTestSize /= 2; // Smaller hit area for branch joints
+      const clickedNode = layoutRef.current.getNodeAtPosition(x, y);
+      if (clickedNode && clickedNode.type === 'leaf') {
+        handleLeafClick(clickedNode.id);
+      }
+    };
 
+    const handleCanvasMouseMove = (event: MouseEvent) => {
+      if (!canvasRef.current || !layoutRef.current) return;
+      
+      const rect = canvasRef.current.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
 
-        // Simple circular hit detection
-        const distance = Math.sqrt(Math.pow(x - nodeDrawX, 2) + Math.pow(y - nodeDrawY, 2));
-        
-        if (distance < hitTestSize) { 
-          if (dNode.data.type === 'leaf') {
-            onLeafClick(dNode.data.id);
-          }
-          // console.log('Clicked node:', dNode.data);
-        }
+      setMousePosition({ x: event.clientX, y: event.clientY });
+
+      const hoveredNodeData = layoutRef.current.getNodeAtPosition(x, y);
+      if (hoveredNodeData && hoveredNodeData.type === 'leaf') {
+        setHoveredNode(hoveredNodeData.id);
+        canvas.style.cursor = 'pointer';
+      } else {
+        setHoveredNode(null);
+        canvas.style.cursor = 'default';
+      }
+    };
+
+    const handleCanvasMouseLeave = () => {
+      setHoveredNode(null);
+      if (canvasRef.current) {
+        canvasRef.current.style.cursor = 'default';
+      }
+    };
+
+    canvas.addEventListener('click', handleCanvasClick);
+    canvas.addEventListener('mousemove', handleCanvasMouseMove);
+    canvas.addEventListener('mouseleave', handleCanvasMouseLeave);
+    setIsInitialized(true);
+
+    // Cleanup
+    return () => {
+      canvas.removeEventListener('click', handleCanvasClick);
+      canvas.removeEventListener('mousemove', handleCanvasMouseMove);
+      canvas.removeEventListener('mouseleave', handleCanvasMouseLeave);
+    };
+
+  }, [
+    treeData, 
+    activeTreeTheme, 
+    treeHealth, 
+    propWidth, 
+    propHeight,
+    handleLeafClick
+  ]);
+
+  // Separate animation loop effect
+  useEffect(() => {
+    if (!isInitialized || !canvasRef.current || !layoutRef.current || !rendererRef.current) return;
+
+    const canvas = canvasRef.current;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+
+    const containerWidth = containerRef.current?.offsetWidth || propWidth || 800;
+    const containerHeight = containerRef.current?.offsetHeight || propHeight || 600;
+    const currentWidth = propWidth || containerWidth;
+    const currentHeight = propHeight || containerHeight;
+
+    // Render once initially
+    const renderFrame = () => {
+      if (!rendererRef.current || !layoutRef.current) return;
+
+      const organicLayout = layoutRef.current.generateLayout(treeData, experienceAreas, roots);
+      context.clearRect(0, 0, currentWidth, currentHeight);
+      rendererRef.current.render(organicLayout, {
+        onLeafClick: handleLeafClick,
+        onRootHover: () => {},
+        onTrunkSectionHover: () => {}
       });
     };
 
-    canvas.addEventListener('click', clickHandler);
+    // Initial render
+    renderFrame();
 
-    // Animation loop for dynamic effects like pulse/sway
-    let animationFrameId: number;
-    const renderLoop = () => {
-        // This is where you would redraw parts of the canvas that animate
-        // For instance, to make 'urgent' tasks pulse without redrawing everything:
-        // Clear only specific areas or re-draw only animated nodes.
-        // For simplicity, this example re-draws everything on data change,
-        // true canvas animation would be more optimized.
+    // Animation loop with toggle
+    if (animationsEnabled) {
+      let lastRenderTime = 0;
+      const targetFPS = 30;
+      const frameInterval = 1000 / targetFPS;
+
+      const animate = (currentTime: number) => {
+        if (currentTime - lastRenderTime < frameInterval) {
+          requestAnimationFrame(animate);
+          return;
+        }
+
+        lastRenderTime = currentTime;
+
+        if (!rendererRef.current || !layoutRef.current) return;
+
+        // Update organic animations
+        const time = currentTime / 1000;
+        layoutRef.current.updateAnimations(time);
         
-        // If any node has an animation like pulse, you'd trigger a re-draw of that node.
-        // The current useEffect handles re-draw on treeData change, which is less frequent.
-        // For continuous animations:
-        // context.clearRect(0,0, currentWidth, currentHeight); // Or selective clear
-        // ... draw all elements, applying time-based transformations for animations ...
-        // animationFrameId = requestAnimationFrame(renderLoop);
-    };
-    // renderLoop(); // Uncomment for continuous animation
+        renderFrame();
+        requestAnimationFrame(animate);
+      };
 
-    return () => {
-      canvas.removeEventListener('click', clickHandler);
-      // cancelAnimationFrame(animationFrameId); // If using continuous animation
-    };
+      const frameId = requestAnimationFrame(animate);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [treeData, activeTreeTheme, treeHealth, propWidth, propHeight, onLeafClick]); // Rerender on data or theme change
+      return () => {
+        if (frameId) {
+          cancelAnimationFrame(frameId);
+        }
+      };
+    }
+
+  }, [isInitialized, experienceAreas, roots, currentTasks, projects, treeData, handleLeafClick, animationsEnabled]);
 
   return (
     <div ref={containerRef} className="w-full h-full flex justify-center items-center relative z-10">
-        <canvas ref={canvasRef} className="rounded-lg shadow-2xl"></canvas>
+      <canvas ref={canvasRef} className="rounded-lg shadow-2xl"></canvas>
+      
+      {/* Tooltip para hojas */}
+      {hoveredNode && (
+        <div 
+          className="absolute pointer-events-none bg-gray-800 text-white px-3 py-2 rounded-lg shadow-lg text-sm z-20"
+          style={{
+            left: mousePosition.x + 10,
+            top: mousePosition.y - 40,
+            transform: 'translateX(-50%)'
+          }}
+        >
+          <div className="font-semibold">Task: {hoveredNode}</div>
+          <div className="text-gray-300 text-xs">Click to interact</div>
+        </div>
+      )}
+
+      {/* Indicador de animaciones */}
+      <div className="absolute top-4 right-4 bg-gray-800 text-white px-3 py-2 rounded-lg shadow-lg text-sm">
+        <div className="flex items-center space-x-2">
+          <div className={`w-2 h-2 rounded-full ${animationsEnabled ? 'bg-green-400' : 'bg-red-400'}`}></div>
+          <span>Animations {animationsEnabled ? 'ON' : 'OFF'}</span>
+        </div>
+        <div className="text-gray-300 text-xs mt-1">Press 'A' to toggle</div>
+      </div>
     </div>
   );
 };
