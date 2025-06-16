@@ -1,4 +1,3 @@
-
 import React, { useState, useContext, useEffect } from 'react';
 import { AppContext, AppContextType } from '../../contexts/AppContext';
 import PassionTest from '../PassionTest/PassionTest';
@@ -19,12 +18,17 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
     roots, setRoots, // roots is read here but setRoots is used
     activeBackground, setActiveBackground,
     activeTreeTheme, setActiveTreeTheme,
-    currentTasks, setCurrentTasks
+    currentTasks, setCurrentTasks,
+    // Nuevo: para gestión de experiencia
+    experienceAreas, setExperienceAreas,
+    analyzeExperience
   } = useContext(AppContext) as AppContextType;
 
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [userRoots, setUserRoots] = useState<Array<{ title: string; description: string }>>([]);
   const [userProjects, setUserProjects] = useState<Array<{ title: string; description: string }>>([]);
+  // Nuevo: para capturar texto de experiencia
+  const [experienceText, setExperienceText] = useState<string>('');
 
   const steps = ONBOARDING_STEPS_CONFIG;
 
@@ -58,7 +62,7 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
   }, [currentStepIndex, passionTestResult, showPassionTest, setShowPassionTest, steps, userRoots.length]); // setUserRoots is stable, not needed in deps
 
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (currentStepIndex < steps.length - 1) {
       const currentStepConfig = steps[currentStepIndex];
 
@@ -77,6 +81,7 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
             title: r.title,
             description: r.description,
             strengthLevel: 8, 
+            relatedExperienceIds: [], // Inicialmente vacío, se conectará después
             createdAt: new Date().toISOString(),
         }));
         setRoots(newRootsData);
@@ -94,6 +99,12 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
             lastActivityAt: new Date().toISOString(),
         }));
         setCurrentTasks(prevTasks => [...prevTasks, ...newTasksData]);
+      }
+      if (currentStepConfig.id === 'experience_mapping') {
+        // Nuevo: analizar la experiencia del usuario con IA
+        if (experienceText.trim()) {
+          await analyzeExperience(experienceText);
+        }
       }
       setCurrentStepIndex(currentStepIndex + 1);
     } else {
@@ -242,6 +253,33 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
             </div>
         )}
 
+        {currentStep.id === 'experience_mapping' && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-400">Cuéntanos sobre tu experiencia, estudios y conocimientos. La IA analizará tu texto para construir el tronco de tu árbol.</p>
+            <textarea 
+              placeholder="Describe tu formación, experiencia laboral, habilidades, certificaciones, etc. Sé tan detallado como quieras..." 
+              value={experienceText}
+              onChange={(e) => setExperienceText(e.target.value)}
+              rows={6}
+              className="w-full p-2 bg-gray-600 border border-gray-500 rounded-md placeholder-gray-400" 
+            />
+            {experienceAreas.length > 0 && (
+              <div className="mt-4 p-3 bg-gray-700 rounded-md">
+                <p className="text-sm text-gray-300">Áreas de experiencia identificadas:</p>
+                <div className="space-y-2 mt-2">
+                  {experienceAreas.map((area, index) => (
+                    <div key={index} className="bg-gray-600 p-2 rounded-md">
+                      <p className="font-semibold text-blue-300">{area.title}</p>
+                      <p className="text-xs text-gray-300">Nivel: {area.experienceLevel}/10</p>
+                      <p className="text-xs text-gray-400">{area.description}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {currentStep.id === 'tree_customization' && (
           <div className="space-y-6">
             <div>
@@ -298,6 +336,7 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
             disabled={(currentStep.id === 'passion_test' && showPassionTest) || 
                       (currentStep.id === 'passion_test' && !passionTestResult && !showPassionTest) || // Disable if test not taken and not currently showing
                       (currentStep.id === 'define_roots' && userRoots.filter(r=>r.title.trim() !== '').length === 0) ||
+                      (currentStep.id === 'experience_mapping' && experienceText.trim() === '') || // Disable if no experience text
                       (currentStep.id === 'first_projects' && userProjects.filter(p=>p.title.trim() !== '').length === 0)
                      }
         >

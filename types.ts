@@ -1,4 +1,3 @@
-
 export interface User {
   id: string;
   email?: string; // Optional as per Supabase schema if auth is separate
@@ -6,7 +5,28 @@ export interface User {
   treeTheme: string; // e.g., 'spring', 'summer'
   backgroundSetting: string; // e.g., 'enchanted_forest'
   treeHealth: number; // 0-100
+  experienceAreas: ExperienceArea[]; // Nuevo: áreas de experiencia del usuario
   createdAt?: string; // User's proposal added this
+}
+
+// Nuevo: Interfaz para áreas de experiencia (tronco)
+export interface ExperienceArea {
+  id: string;
+  userId: string;
+  title: string; // "Tecnología", "Marketing", "Diseño", etc.
+  description: string; // Descripción libre analizada por IA
+  experienceLevel: number; // 1-10 (calculado por IA basado en descripción)
+  credentials: string[]; // Extraído por IA de la descripción
+  relatedRootIds: string[]; // Qué pasiones alimentan esta área
+  relatedProjectIds: string[]; // Qué proyectos surgen de esta experiencia
+  trunkSection: {
+    thickness: number; // Calculado desde experienceLevel (1-10)
+    textureDetail: 'basic' | 'medium' | 'detailed'; // Basado en experienceLevel
+    position: number; // Altura relativa en el tronco (0-1)
+    color: string; // Color basado en experiencia y salud
+  };
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface RootData {
@@ -15,6 +35,7 @@ export interface RootData {
   title: string;
   description: string;
   strengthLevel: number; // 1-10
+  relatedExperienceIds: string[]; // Nuevo: áreas de experiencia relacionadas
   createdAt: string; // ISO date string
 }
 
@@ -25,6 +46,8 @@ export interface ProjectData {
   description: string;
   priorityLevel: number; // 1-5
   trunkThickness?: number; // Calculated or set
+  originRootId?: string; // Nuevo: de qué raíz/pasión surge este proyecto
+  originExperienceId?: string; // Nuevo: de qué área de experiencia surge
   // branchPosition removed as per user's ProjectData suggestion (implicitly by omission)
   status: 'active' | 'completed' | 'paused';
   createdAt: string; // ISO date string

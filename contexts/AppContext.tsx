@@ -1,8 +1,6 @@
-
-
 console.log('APPCONTEXT.TSX: Script start');
 import React, { createContext, useState, useEffect, useCallback } from 'react';
-import { User, RootData, ProjectData, TaskData, AchievementData, TreeNode, LeafStatus, PassionTestResult } from '../types';
+import { User, RootData, ProjectData, TaskData, AchievementData, TreeNode, LeafStatus, PassionTestResult, ExperienceArea } from '../types';
 // Ensure all necessary constants are imported, especially GEMINI_TEXT_MODEL for runPassionTest
 import { DEFAULT_USER_ID, INITIAL_TREE_DATA, backgroundThemes, GEMINI_TEXT_MODEL, leafColors } from '../constants'; 
 import { GoogleGenAI } from '@google/genai'; // Ensure this import is present
@@ -18,6 +16,10 @@ export interface AppContextType {
   setCurrentTasks: React.Dispatch<React.SetStateAction<TaskData[]>>;
   achievements: AchievementData[];
   setAchievements: React.Dispatch<React.SetStateAction<AchievementData[]>>;
+  // Nuevo: gestión de áreas de experiencia
+  experienceAreas: ExperienceArea[];
+  setExperienceAreas: React.Dispatch<React.SetStateAction<ExperienceArea[]>>;
+  analyzeExperience: (experienceText: string) => Promise<void>;
   treeData: TreeNode;
   setTreeData: React.Dispatch<React.SetStateAction<TreeNode>>;
   activeBackground: string;
@@ -57,6 +59,7 @@ const defaultUser: User = {
   treeTheme: 'spring',
   backgroundSetting: 'enchanted_forest', // Default, user's proposal also used this
   treeHealth: 75,
+  experienceAreas: [], // Inicialmente vacío, se llenará en onboarding
 };
 
 // Using user's proposed initialTasks, ensuring consistency with LeafStatus
@@ -130,6 +133,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [achievements, setAchievements] = useState<AchievementData[]>([]); // User proposal also started empty
+  
+  // Nuevo: áreas de experiencia
+  const [experienceAreas, setExperienceAreas] = useState<ExperienceArea[]>(() => {
+    try {
+      const savedExperience = localStorage.getItem('productivitree-experience');
+      return savedExperience ? JSON.parse(savedExperience) : [];
+    } catch (error) {
+      console.error("Failed to parse experience areas from localStorage:", error);
+      localStorage.removeItem('productivitree-experience');
+      return [];
+    }
+  });
+  
   const [treeData, setTreeData] = useState<TreeNode>(INITIAL_TREE_DATA); // Use new INITIAL_TREE_DATA
   
   const [activeBackground, setActiveBackground] = useState<string>(() => {
@@ -183,7 +199,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskData | null>(null);
-  const [ai, setAi] = useState<GoogleGenAI | null>(null); // Reinstate AI client state
+  const [ai, setAi] = useState<GoogleGenAI | null>(null); // Reinstate AI client
 
   // Reinstate Gemini API initialization
   useEffect(() => {
@@ -234,6 +250,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try { localStorage.setItem('productivitree-tasks', JSON.stringify(currentTasks)); }
     catch (e) { console.error("Failed to save tasks to localStorage", e); }
   }, [currentTasks]);
+  
+  // Persistir áreas de experiencia
+  useEffect(() => {
+    try { localStorage.setItem('productivitree-experience', JSON.stringify(experienceAreas)); }
+    catch (e) { console.error("Failed to save experience areas to localStorage", e); }
+  }, [experienceAreas]);
   
   // Revised useEffects for activeBackground and activeTreeTheme to avoid potential loops
   useEffect(() => {
@@ -302,7 +324,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         config: { responseMimeType: "application/json" }
       });
       
-      jsonStr = response.text; 
+      jsonStr = response.text || ""; 
       console.log("[AppContext runPassionTest] Raw response text from Gemini API:", jsonStr);
 
       // 1. Remove Byte Order Mark (BOM)
@@ -362,6 +384,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             title: rs.title,
             description: rs.description,
             strengthLevel: rs.strength,
+            relatedExperienceIds: [], // Inicialmente vacío, se llenará cuando se mapee experiencia
             createdAt: new Date().toISOString(),
         }));
         setRoots(newRoots);
@@ -376,6 +399,98 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setIsLoading(false);
     }
   }, [ai, currentUser?.id, setCurrentUser, setRoots, setPassionTestResult, setError, setIsLoading]);
+  
+  // Función para analizar texto de experiencia con IA
+  const analyzeExperience = useCallback(async (experienceText: string) => {
+    if (!ai) {
+      setError("Gemini API is not initialized. Please ensure the API key is correctly set up.");
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
+    
+    const prompt = `
+      You are an expert career advisor and skills assessor.
+      A user has provided the following text describing their education, work experience, skills, and background:
+      
+      "${experienceText}"
+      
+      Please analyze this text and extract:
+      1. "experience_areas": 3-7 broad areas of expertise (e.g., "Technology", "Marketing", "Design", "Management", "Education")
+      2. For each area, provide:
+         - "title": Clear area name
+         - "description": 2-3 sentence summary of their experience in this area
+         - "experience_level": Number 1-10 based on depth/years of experience mentioned
+         - "credentials": Array of specific qualifications, certifications, degrees, or achievements mentioned
+      
+      Return the response strictly as a JSON object:
+      {
+        "experience_areas": [
+          {
+            "title": "string",
+            "description": "string", 
+            "experience_level": number,
+            "credentials": ["string", ...]
+          },
+          ...
+        ]
+      }
+    `;
+
+    let jsonStr = "";
+
+    try {
+      const response = await ai.models.generateContent({
+        model: GEMINI_TEXT_MODEL,
+        contents: prompt,
+        config: { responseMimeType: "application/json" }
+      });
+      
+      jsonStr = response.text || "";
+      console.log("[AppContext analyzeExperience] Raw response:", jsonStr);
+
+      // Limpiar respuesta (similar a runPassionTest)
+      if (jsonStr.charCodeAt(0) === 0xFEFF) {
+        jsonStr = jsonStr.substring(1);
+      }
+      jsonStr = jsonStr.trim();
+
+      const result = JSON.parse(jsonStr);
+      
+      if (result.experience_areas) {
+        const newExperienceAreas: ExperienceArea[] = result.experience_areas.map((area: any, index: number) => ({
+          id: `exp-${Date.now()}-${index}`,
+          userId: currentUser?.id || DEFAULT_USER_ID,
+          title: area.title,
+          description: area.description,
+          experienceLevel: Math.min(10, Math.max(1, area.experience_level || 1)),
+          credentials: area.credentials || [],
+          relatedRootIds: [], // Se conectará después
+          relatedProjectIds: [], // Se conectará después
+          trunkSection: {
+            thickness: Math.min(10, Math.max(1, area.experience_level || 1)),
+            textureDetail: area.experience_level >= 7 ? 'detailed' : area.experience_level >= 4 ? 'medium' : 'basic',
+            position: index / Math.max(1, result.experience_areas.length - 1), // Distribuir en el tronco
+            color: `hsl(${30 + (area.experience_level * 2)}, 60%, ${40 + (area.experience_level * 2)}%)`, // Marrón más rico con más experiencia
+          },
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }));
+        
+        setExperienceAreas(newExperienceAreas);
+        
+        // Actualizar usuario con las áreas de experiencia
+        setCurrentUser(prev => prev ? ({ ...prev, experienceAreas: newExperienceAreas }) : null);
+      }
+
+    } catch (e: any) {
+      console.error("Error analyzing experience:", e.message, e);
+      setError(`Failed to analyze experience: ${e.message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [ai, currentUser?.id, setCurrentUser, setExperienceAreas, setError, setIsLoading]);
   
   const addTask = useCallback((taskData: Omit<TaskData, 'id' | 'createdAt' | 'lastActivityAt'>) => {
     const newTask: TaskData = {
@@ -491,6 +606,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       projects, setProjects,
       currentTasks, setCurrentTasks,
       achievements, setAchievements,
+      experienceAreas, setExperienceAreas,
+      analyzeExperience,
       treeData, setTreeData,
       activeBackground, setActiveBackground,
       activeTreeTheme, setActiveTreeTheme,
