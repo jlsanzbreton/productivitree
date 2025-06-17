@@ -3,8 +3,8 @@ import { AppContext, AppContextType } from '../../contexts/AppContext';
 import PassionTest from '../PassionTest/PassionTest';
 import { Button } from '../UI/Button';
 import { ONBOARDING_STEPS_CONFIG, backgroundThemes, treeThemes, DEFAULT_USER_ID } from '../../constants';
-import { CheckCircleIcon, ChevronRightIcon } from '../Icons/HeroIcons';
-import { RootData, TaskData, LeafStatus } from '../../types';
+import { CheckCircleIcon, ChevronRightIcon, ArrowPathIcon, LightBulbIcon } from '../Icons/HeroIcons';
+import { RootData, TaskData, LeafStatus, ProjectData } from '../../types';
 
 
 const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
@@ -16,6 +16,7 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
     currentUser,
     setCurrentUser,
     setRoots,
+    setProjects, // Para crear proyectos (ramas)
     activeBackground, setActiveBackground,
     activeTreeTheme, setActiveTreeTheme,
     setCurrentTasks,
@@ -29,6 +30,7 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
   const [userProjects, setUserProjects] = useState<Array<{ title: string; description: string }>>([]);
   // Nuevo: para capturar texto de experiencia
   const [experienceText, setExperienceText] = useState<string>('');
+  const [isAnalyzingExperience, setIsAnalyzingExperience] = useState<boolean>(false);
 
   const steps = ONBOARDING_STEPS_CONFIG;
 
@@ -87,27 +89,32 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
         setRoots(newRootsData);
       }
       if (currentStepConfig.id === 'first_projects') {
-        const newTasksData: TaskData[] = userProjects
+        // Convertir proyectos del onboarding a ProjectData (ramas) en lugar de TaskData
+        const newProjectsData: ProjectData[] = userProjects
           .filter(p => p.title.trim() !== '') // Ensure non-empty projects are saved
           .map((p, i) => ({
-            id: `onboarding-task-${Date.now()}-${i}`, 
+            id: `onboarding-project-${Date.now()}-${i}`, 
+            userId: currentUser?.id || DEFAULT_USER_ID,
             title: p.title,
             description: p.description,
-            status: LeafStatus.Pending,
-            priority: 1,
+            priorityLevel: 3, // Medium priority by default
+            status: 'active',
             createdAt: new Date().toISOString(),
-            lastActivityAt: new Date().toISOString(),
         }));
-        setCurrentTasks(prevTasks => [...prevTasks, ...newTasksData]);
+        setProjects(prevProjects => [...prevProjects, ...newProjectsData]);
       }
       if (currentStepConfig.id === 'experience_mapping') {
         // Procesar experiencia con IA si hay texto
         if (experienceText.trim()) {
+          setIsAnalyzingExperience(true);
           try {
             await analyzeExperience(experienceText);
+            console.log('Experience analysis completed successfully');
           } catch (error) {
             console.error('Error analyzing experience:', error);
             // Continuar aunque haya error - el usuario puede continuar sin análisis de IA
+          } finally {
+            setIsAnalyzingExperience(false);
           }
         }
       }
@@ -306,25 +313,69 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
         {currentStep.id === 'experience_mapping' && (
           <div className="space-y-4">
             <p className="text-sm text-gray-400">Cuéntanos sobre tu experiencia, estudios y conocimientos. La IA analizará tu texto para construir el tronco de tu árbol.</p>
+            
             <textarea 
               placeholder="Describe tu formación, experiencia laboral, habilidades, certificaciones, etc. Sé tan detallado como quieras..." 
               value={experienceText}
               onChange={(e) => setExperienceText(e.target.value)}
               rows={6}
-              className="w-full p-2 bg-gray-600 border border-gray-500 rounded-md placeholder-gray-400" 
+              className="w-full p-2 bg-gray-600 border border-gray-500 rounded-md placeholder-gray-400"
+              disabled={isAnalyzingExperience}
             />
-            {experienceAreas.length > 0 && (
-              <div className="mt-4 p-3 bg-gray-700 rounded-md">
-                <p className="text-sm text-gray-300">Áreas de experiencia identificadas:</p>
-                <div className="space-y-2 mt-2">
+
+            {/* Loading state during analysis */}
+            {isAnalyzingExperience && (
+              <div className="p-4 bg-blue-900/30 border border-blue-500 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <ArrowPathIcon className="h-6 w-6 text-blue-400 animate-spin" />
+                  <div>
+                    <p className="text-blue-300 font-semibold">Analizando tu experiencia...</p>
+                    <p className="text-blue-200 text-sm">La IA está procesando tu texto para identificar áreas de experiencia y construir el tronco de tu árbol.</p>
+                  </div>
+                </div>
+                <div className="mt-3 w-full bg-blue-800 rounded-full h-2">
+                  <div className="bg-blue-400 h-2 rounded-full animate-pulse" style={{ width: '60%' }}></div>
+                </div>
+                <p className="text-blue-300 text-xs mt-2">Esto puede tomar 10-30 segundos...</p>
+              </div>
+            )}
+
+            {/* Results display */}
+            {experienceAreas.length > 0 && !isAnalyzingExperience && (
+              <div className="p-4 bg-gradient-to-br from-green-800/40 to-blue-800/40 border border-green-500 rounded-lg">
+                <div className="flex items-center space-x-2 mb-3">
+                  <CheckCircleIcon className="h-6 w-6 text-green-400" />
+                  <p className="text-green-300 font-semibold">¡Análisis completado!</p>
+                </div>
+                <p className="text-sm text-gray-300 mb-3">Áreas de experiencia identificadas para tu tronco:</p>
+                <div className="space-y-2">
                   {experienceAreas.map((area, index) => (
-                    <div key={index} className="bg-gray-600 p-2 rounded-md">
-                      <p className="font-semibold text-blue-300">{area.title}</p>
-                      <p className="text-xs text-gray-300">Nivel: {area.experienceLevel}/10</p>
-                      <p className="text-xs text-gray-400">{area.description}</p>
+                    <div key={index} className="bg-gray-700/80 p-3 rounded-md border-l-4 border-green-400">
+                      <div className="flex items-center space-x-2 mb-1">
+                        <LightBulbIcon className="h-4 w-4 text-yellow-400" />
+                        <p className="font-semibold text-blue-300">{area.title}</p>
+                        <span className="px-2 py-1 bg-green-600 text-green-100 rounded-full text-xs">
+                          Nivel {area.experienceLevel}/10
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-300 ml-6">{area.description}</p>
                     </div>
                   ))}
                 </div>
+                <div className="mt-3 p-2 bg-blue-900/40 rounded-md">
+                  <p className="text-blue-200 text-xs">
+                    💡 Estas áreas formarán el tronco de tu árbol, conectando tus pasiones (raíces) con tus proyectos (ramas).
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Prompt for more detail if no results yet */}
+            {experienceText.trim() && experienceAreas.length === 0 && !isAnalyzingExperience && (
+              <div className="p-3 bg-yellow-900/30 border border-yellow-500 rounded-lg">
+                <p className="text-yellow-300 text-sm">
+                  💡 <strong>Tip:</strong> Sé más específico para mejores resultados. Menciona tecnologías, industrias, roles, educación formal, certificaciones, proyectos previos, etc.
+                </p>
               </div>
             )}
           </div>
@@ -386,12 +437,21 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
             disabled={(currentStep.id === 'passion_test' && showPassionTest) || 
                       (currentStep.id === 'passion_test' && !passionTestResult && !showPassionTest) || // Disable if test not taken and not currently showing
                       (currentStep.id === 'define_roots' && userRoots.filter(r=>r.title.trim() !== '').length === 0) ||
-                      (currentStep.id === 'experience_mapping' && experienceText.trim() === '') || // Disable if no experience text
+                      (currentStep.id === 'experience_mapping' && (experienceText.trim() === '' || isAnalyzingExperience)) || // Disable if no experience text or analyzing
                       (currentStep.id === 'first_projects' && userProjects.filter(p=>p.title.trim() !== '').length === 0)
                      }
         >
-          {currentStepIndex === steps.length - 1 ? "Let's Grow!" : "Continue"}
-          <ChevronRightIcon className="h-5 w-5 ml-2" />
+          {isAnalyzingExperience ? (
+            <>
+              <ArrowPathIcon className="h-5 w-5 mr-2 animate-spin" />
+              Analyzing...
+            </>
+          ) : (
+            <>
+              {currentStepIndex === steps.length - 1 ? "Let's Grow!" : "Continue"}
+              <ChevronRightIcon className="h-5 w-5 ml-2" />
+            </>
+          )}
         </Button>
       </div>
     </div>

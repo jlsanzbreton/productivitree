@@ -71,6 +71,13 @@ export class OrganicTreeLayout {
    * Generates the complete organic tree layout
    */
   public generateLayout(treeData: TreeNode, experienceAreas: ExperienceArea[], roots: RootData[]): OrganicLayoutResult {
+    // 🐛 Debug: Verificar datos de entrada
+    console.log('🌳 OrganicTreeLayout.generateLayout() called with:');
+    console.log('  treeData:', treeData);
+    console.log('  treeData.children length:', treeData.children?.length || 0);
+    console.log('  experienceAreas length:', experienceAreas.length);
+    console.log('  roots length:', roots.length);
+
     const layout: OrganicLayoutResult = {
       nodes: [],
       connections: []
@@ -263,7 +270,16 @@ export class OrganicTreeLayout {
     const branchNodes: OrganicNode[] = [];
     const leafNodes: OrganicNode[] = [];
     
-    if (!treeData.children || trunkSections.length === 0) return { branchNodes, leafNodes };
+    // 🐛 Debug: Verificar entrada
+    console.log('🌿 generateBranchesAndLeaves() called with:');
+    console.log('  treeData:', treeData);
+    console.log('  treeData.children:', treeData.children);
+    console.log('  trunkSections length:', trunkSections.length);
+    
+    if (!treeData.children || trunkSections.length === 0) {
+      console.log('⚠️ Early return: no children or trunk sections');
+      return { branchNodes, leafNodes };
+    }
     
     // 🌳 Mejora 1: Seleccionar secciones del tronco más altas para las ramas
     const upperTrunkSections = trunkSections

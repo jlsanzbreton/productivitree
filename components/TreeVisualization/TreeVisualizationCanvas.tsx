@@ -558,6 +558,10 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
         {debugMode && (
           <div className="mt-2 pt-2 border-t border-gray-600 text-xs text-gray-400">
             <div>Nodes: {layoutRef.current?.generateLayout(treeData, experienceAreas, roots).nodes.length || 0}</div>
+            <div>Projects: {projects.length}</div>
+            <div>Tasks: {currentTasks.length}</div>
+            <div>Roots: {roots.length}</div>
+            <div>Experience: {experienceAreas.length}</div>
             <div>FPS: ~{animationsEnabled ? '30' : '0'}</div>
             <div>Time: {currentAnimationTime.toFixed(1)}s</div>
           </div>

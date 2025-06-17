@@ -119,7 +119,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
-  const [projects, setProjects] = useState<ProjectData[]>([]); // User proposal also started with empty projects
+  const [projects, setProjects] = useState<ProjectData[]>(() => {
+    try {
+      const savedProjects = localStorage.getItem('productivitree-projects');
+      return savedProjects ? JSON.parse(savedProjects) : [];
+    } catch (error) {
+      console.error("Failed to parse projects from localStorage:", error);
+      localStorage.removeItem('productivitree-projects');
+      return [];
+    }
+  });
   
   const [currentTasks, setCurrentTasks] = useState<TaskData[]>(() => {
     try {
@@ -245,6 +254,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try { localStorage.setItem('productivitree-roots', JSON.stringify(roots)); }
     catch (e) { console.error("Failed to save roots to localStorage", e); }
   }, [roots]);
+
+  useEffect(() => {
+    try { localStorage.setItem('productivitree-projects', JSON.stringify(projects)); }
+    catch (e) { console.error("Failed to save projects to localStorage", e); }
+  }, [projects]);
 
   useEffect(() => {
     try { localStorage.setItem('productivitree-tasks', JSON.stringify(currentTasks)); }
