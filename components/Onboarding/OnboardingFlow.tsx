@@ -187,10 +187,55 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
         )}
         {/* Message shown after PassionTest calls its onComplete (which sets showPassionTest to false) */}
         {currentStep.id === 'passion_test' && !showPassionTest && passionTestResult && (
-            <div className="p-4 bg-gray-700 rounded-lg text-center">
-                <CheckCircleIcon className="h-12 w-12 text-green-400 mx-auto mb-2" />
-                <p className="text-lg font-semibold">Passion Test Completed!</p>
-                <p className="text-sm text-gray-300">Your insights are ready. Click "Continue" to define your tree's roots.</p>
+            <div className="space-y-4">
+                <div className="p-4 bg-gradient-to-br from-green-600 to-green-700 rounded-lg text-center">
+                    <CheckCircleIcon className="h-12 w-12 text-green-200 mx-auto mb-2" />
+                    <p className="text-xl font-bold text-white">Passion Test Completed!</p>
+                    <p className="text-sm text-green-200">Your personalized insights are ready to grow your tree.</p>
+                </div>
+                
+                {/* Show a preview of the insights */}
+                <div className="p-4 bg-gray-700 rounded-lg">
+                    <h4 className="font-semibold text-blue-300 mb-2">Your Passion Profile Preview:</h4>
+                    
+                    {passionTestResult.passion_categories.length > 0 && (
+                        <div className="mb-3">
+                            <p className="text-sm text-gray-300 mb-1">Key Areas:</p>
+                            <div className="flex flex-wrap gap-2">
+                                {passionTestResult.passion_categories.slice(0, 3).map((category, i) => (
+                                    <span key={i} className="px-2 py-1 bg-blue-600 text-blue-100 rounded-full text-xs">
+                                        {category}
+                                    </span>
+                                ))}
+                                {passionTestResult.passion_categories.length > 3 && (
+                                    <span className="px-2 py-1 bg-gray-600 text-gray-300 rounded-full text-xs">
+                                        +{passionTestResult.passion_categories.length - 3} more
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                    
+                    <div className="mb-3">
+                        <p className="text-sm text-gray-300 mb-1">Suggested Tree Roots:</p>
+                        <p className="text-xs text-gray-400">
+                            {passionTestResult.root_suggestions.length} personalized roots ready to plant
+                        </p>
+                    </div>
+                    
+                    {passionTestResult.personalized_insights && (
+                        <div>
+                            <p className="text-sm text-gray-300 mb-1">Key Insight:</p>
+                            <p className="text-xs text-gray-400 italic">
+                                "{passionTestResult.personalized_insights.slice(0, 120)}..."
+                            </p>
+                        </div>
+                    )}
+                </div>
+                
+                <div className="text-center">
+                    <p className="text-sm text-gray-300">Ready to plant your roots? Click "Continue" below!</p>
+                </div>
             </div>
         )}
          {/* Message if user somehow lands here without results and test not shown (e.g. error) */}

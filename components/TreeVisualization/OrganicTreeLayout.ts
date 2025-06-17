@@ -99,32 +99,81 @@ export class OrganicTreeLayout {
   }
 
   /**
-   * Updates animations based on time
+   * Updates animations based on time - returns animated positions without modifying original nodes
    */
-  public updateAnimations(time: number): void {    
-    if (!this.currentLayout) return;
+  public getAnimatedLayout(time: number): OrganicLayoutResult | null {    
+    if (!this.currentLayout) return null;
 
-    // Apply wind effects to branches and leaves
-    this.currentLayout.nodes.forEach(node => {
-      if (node.type === 'branch' || node.type === 'leaf') {
-        const windOffset = Math.sin(time * 2 + node.x * 0.01) * this.config.windStrength! * 3;
-        node.x += windOffset;
-      }
-    });
+    // Create a copy with animated positions
+    const animatedLayout: OrganicLayoutResult = {
+      nodes: this.currentLayout.nodes.map(node => {
+        if (node.type === 'branch' || node.type === 'leaf') {
+          // Suave animación de brisa usando múltiples ondas sinusoidales
+          const baseFreq = 0.8; // Frecuencia más lenta para movimiento natural
+          const windStrength = this.config.windStrength! * 0.5; // Reducir intensidad
+          
+          // Combinar múltiples ondas para movimiento más orgánico
+          const windOffsetX = Math.sin(time * baseFreq + node.x * 0.005) * windStrength * 2 +
+                             Math.sin(time * baseFreq * 1.3 + node.y * 0.003) * windStrength * 0.5;
+          const windOffsetY = Math.sin(time * baseFreq * 0.7 + node.x * 0.004) * windStrength * 0.8;
+          
+          return {
+            ...node,
+            x: node.x + windOffsetX,
+            y: node.y + windOffsetY
+          };
+        }
+        return node; // Tronco y raíces se mantienen estáticos
+      }),
+      connections: this.currentLayout.connections
+    };
+
+    return animatedLayout;
   }
 
   /**
-   * Gets the node at a specific position for click detection
+   * Gets the node at a specific position for click detection, considering animations
    */
-  public getNodeAtPosition(x: number, y: number): OrganicNode | null {
+  public getNodeAtPosition(x: number, y: number, animationTime?: number): OrganicNode | null {
     if (!this.currentLayout) return null;
 
-    for (const node of this.currentLayout.nodes) {
-      const distance = Math.sqrt(Math.pow(x - node.x, 2) + Math.pow(y - node.y, 2));
-      const hitRadius = node.size + 5; // Add some padding for easier clicking
+    // Usar layout animado si se proporciona tiempo de animación
+    const layoutToUse = animationTime !== undefined ? 
+      this.getAnimatedLayout(animationTime) : 
+      this.currentLayout;
+    
+    if (!layoutToUse) return null;
+
+    // Buscar en orden de prioridad: hojas, ramas, tronco, raíces
+    const nodeTypes = ['leaf', 'branch', 'trunk', 'root'] as const;
+    
+    for (const nodeType of nodeTypes) {
+      const nodesOfType = layoutToUse.nodes.filter(n => n.type === nodeType);
       
-      if (distance <= hitRadius) {
-        return node;
+      for (const node of nodesOfType) {
+        let hitRadius = node.size;
+        
+        // Ajustar área de hit según el tipo
+        switch (node.type) {
+          case 'leaf':
+            hitRadius = Math.max(15, node.size * 2); // Área más grande para hojas
+            break;
+          case 'branch':
+            hitRadius = Math.max(12, node.thickness || node.size); 
+            break;
+          case 'trunk':
+            hitRadius = Math.max(20, node.size / 2);
+            break;
+          case 'root':
+            hitRadius = Math.max(10, node.size);
+            break;
+        }
+        
+        const distance = Math.sqrt(Math.pow(x - node.x, 2) + Math.pow(y - node.y, 2));
+        
+        if (distance <= hitRadius) {
+          return node;
+        }
       }
     }
 
@@ -275,8 +324,8 @@ export class OrganicTreeLayout {
           const perpOffset = side * (15 + (taskIndex % 3) * 8); // 15, 23, 31 píxeles
           const perpAngle = finalAngle + Math.PI / 2;
           
-          // 🎨 Tamaño de hoja más consistente
-          const leafSize = 5 + Math.random() * 2; // Entre 5-7 píxeles
+          // 🎨 Tamaño de hoja más consistente y visible
+          const leafSize = 8 + Math.random() * 4; // Entre 8-12 píxeles (aumentado)
           
           const leaf: OrganicNode = {
             id: taskNode.id,

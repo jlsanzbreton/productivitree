@@ -220,18 +220,27 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [animationsEnabled, setAnimationsEnabled] = useState(false);
+  const [currentAnimationTime, setCurrentAnimationTime] = useState(0); // Para hover detection
+  const [debugMode, setDebugMode] = useState(false); // Debug mode for development
 
   // Memoize callback to prevent unnecessary re-renders
   const handleLeafClick = useCallback((nodeId: string) => {
     onLeafClick(nodeId);
   }, [onLeafClick]);
 
-  // Keyboard shortcut to toggle animations
+  // Keyboard shortcuts to toggle animations and debug mode
   useEffect(() => {
     const handleKeyPress = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() === 'a') {
         setAnimationsEnabled(prev => {
           console.log(`Animations ${!prev ? 'enabled' : 'disabled'}`);
+          return !prev;
+        });
+      }
+      if (event.key.toLowerCase() === 'd' && event.ctrlKey) {
+        event.preventDefault();
+        setDebugMode(prev => {
+          console.log(`Debug mode ${!prev ? 'enabled' : 'disabled'}`);
           return !prev;
         });
       }
@@ -315,8 +324,31 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
       const y = event.clientY - rect.top;
 
       const clickedNode = layoutRef.current.getNodeAtPosition(x, y);
-      if (clickedNode && clickedNode.type === 'leaf') {
-        handleLeafClick(clickedNode.id);
+      if (clickedNode) {
+        // Handle different types of clicks with user feedback
+        switch (clickedNode.type) {
+          case 'leaf':
+            handleLeafClick(clickedNode.id);
+            break;
+          case 'branch':
+            // Project/branch interaction - show info or edit options
+            console.log('Branch clicked:', clickedNode.data);
+            // TODO: Open project management modal
+            alert(`🌿 Project Branch clicked!\n\nThis will open project management in a future update.\n\nBranch: ${clickedNode.id || 'Unnamed project'}`);
+            break;
+          case 'trunk':
+            // Experience area visualization
+            console.log('Trunk section clicked:', clickedNode.data);
+            // TODO: Show experience details modal
+            alert(`🌳 Experience Area clicked!\n\nThis will show your experience details in a future update.\n\nArea: ${clickedNode.id || 'Core experience'}`);
+            break;
+          case 'root':
+            // Passion/root editing
+            console.log('Root clicked:', clickedNode.data);
+            // TODO: Open passion editing modal
+            alert(`🌱 Root clicked!\n\nThis will open passion editing in a future update.\n\nRoot: ${clickedNode.id || 'Unnamed passion'}`);
+            break;
+        }
       }
     };
 
@@ -329,9 +361,12 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
 
       setMousePosition({ x: event.clientX, y: event.clientY });
 
-      const hoveredNodeData = layoutRef.current.getNodeAtPosition(x, y);
-      if (hoveredNodeData && hoveredNodeData.type === 'leaf') {
-        setHoveredNode(hoveredNodeData.id);
+      // Usar el tiempo de animación actual si las animaciones están habilitadas
+      const animTime = animationsEnabled ? currentAnimationTime : undefined;
+      const hoveredNodeData = layoutRef.current.getNodeAtPosition(x, y, animTime);
+      
+      if (hoveredNodeData) {
+        setHoveredNode(`${hoveredNodeData.type}-${hoveredNodeData.id}`);
         canvas.style.cursor = 'pointer';
       } else {
         setHoveredNode(null);
@@ -380,17 +415,37 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
     const currentWidth = propWidth || containerWidth;
     const currentHeight = propHeight || containerHeight;
 
-    // Render once initially
-    const renderFrame = () => {
+    // Render function with error handling
+    const renderFrame = (useAnimations = false, animationTime = 0) => {
       if (!rendererRef.current || !layoutRef.current) return;
 
-      const organicLayout = layoutRef.current.generateLayout(treeData, experienceAreas, roots);
-      context.clearRect(0, 0, currentWidth, currentHeight);
-      rendererRef.current.render(organicLayout, {
-        onLeafClick: handleLeafClick,
-        onRootHover: () => {},
-        onTrunkSectionHover: () => {}
-      });
+      try {
+        let layoutToRender;
+        if (useAnimations) {
+          // Use animated layout
+          layoutToRender = layoutRef.current.getAnimatedLayout(animationTime);
+          if (!layoutToRender) {
+            // Fallback to static layout if animation fails
+            layoutToRender = layoutRef.current.generateLayout(treeData, experienceAreas, roots);
+          }
+        } else {
+          // Use static layout
+          layoutToRender = layoutRef.current.generateLayout(treeData, experienceAreas, roots);
+        }
+
+        context.clearRect(0, 0, currentWidth, currentHeight);
+        rendererRef.current.render(layoutToRender, {
+          onLeafClick: handleLeafClick,
+          onRootHover: () => {},
+          onTrunkSectionHover: () => {}
+        });
+      } catch (error) {
+        console.error('Error rendering tree frame:', error);
+        // Fallback: try rendering without animations
+        if (useAnimations) {
+          renderFrame(false, 0);
+        }
+      }
     };
 
     // Initial render
@@ -412,11 +467,11 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
 
         if (!rendererRef.current || !layoutRef.current) return;
 
-        // Update organic animations
+        // Render with animations
         const time = currentTime / 1000;
-        layoutRef.current.updateAnimations(time);
+        setCurrentAnimationTime(time); // Actualizar tiempo para hover detection
+        renderFrame(true, time);
         
-        renderFrame();
         requestAnimationFrame(animate);
       };
 
@@ -435,7 +490,7 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
     <div ref={containerRef} className="w-full h-full flex justify-center items-center relative z-10">
       <canvas ref={canvasRef} className="rounded-lg shadow-2xl"></canvas>
       
-      {/* Tooltip para hojas */}
+      {/* Tooltip mejorado para todos los tipos de nodos */}
       {hoveredNode && (
         <div 
           className="absolute pointer-events-none bg-gray-800 text-white px-3 py-2 rounded-lg shadow-lg text-sm z-20"
@@ -445,18 +500,74 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
             transform: 'translateX(-50%)'
           }}
         >
-          <div className="font-semibold">Task: {hoveredNode}</div>
-          <div className="text-gray-300 text-xs">Click to interact</div>
+          {(() => {
+            const [nodeType, nodeId] = hoveredNode.split('-');
+            switch (nodeType) {
+              case 'leaf':
+                return (
+                  <>
+                    <div className="font-semibold">📄 Task: {nodeId}</div>
+                    <div className="text-gray-300 text-xs">Click to edit task</div>
+                  </>
+                );
+              case 'branch':
+                return (
+                  <>
+                    <div className="font-semibold">🌿 Project: {nodeId}</div>
+                    <div className="text-gray-300 text-xs">Click to manage project</div>
+                  </>
+                );
+              case 'trunk':
+                return (
+                  <>
+                    <div className="font-semibold">🌳 Experience Area</div>
+                    <div className="text-gray-300 text-xs">Click to view details</div>
+                  </>
+                );
+              case 'root':
+                return (
+                  <>
+                    <div className="font-semibold">🌱 Root: {nodeId}</div>
+                    <div className="text-gray-300 text-xs">Click to edit passion</div>
+                  </>
+                );
+              default:
+                return (
+                  <>
+                    <div className="font-semibold">Element: {hoveredNode}</div>
+                    <div className="text-gray-300 text-xs">Click to interact</div>
+                  </>
+                );
+            }
+          })()}
         </div>
       )}
 
-      {/* Indicador de animaciones */}
-      <div className="absolute top-4 right-4 bg-gray-800 text-white px-3 py-2 rounded-lg shadow-lg text-sm">
-        <div className="flex items-center space-x-2">
-          <div className={`w-2 h-2 rounded-full ${animationsEnabled ? 'bg-green-400' : 'bg-red-400'}`}></div>
-          <span>Animations {animationsEnabled ? 'ON' : 'OFF'}</span>
+      {/* Enhanced animation toggle indicator with debug info */}
+      <div className="absolute top-4 right-4 bg-gray-900/80 backdrop-blur-sm text-white px-4 py-3 rounded-lg shadow-lg text-sm border border-gray-600">
+        <div className="flex items-center space-x-3">
+          <div className={`w-3 h-3 rounded-full ${animationsEnabled ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></div>
+          <span className="font-medium">
+            Wind Effects {animationsEnabled ? 'ON' : 'OFF'}
+          </span>
         </div>
-        <div className="text-gray-300 text-xs mt-1">Press 'A' to toggle</div>
+        <div className="text-gray-300 text-xs mt-1 flex items-center">
+          <kbd className="px-1.5 py-0.5 bg-gray-700 rounded text-xs mr-1">A</kbd>
+          to toggle
+        </div>
+        {debugMode && (
+          <div className="mt-2 pt-2 border-t border-gray-600 text-xs text-gray-400">
+            <div>Nodes: {layoutRef.current?.generateLayout(treeData, experienceAreas, roots).nodes.length || 0}</div>
+            <div>FPS: ~{animationsEnabled ? '30' : '0'}</div>
+            <div>Time: {currentAnimationTime.toFixed(1)}s</div>
+          </div>
+        )}
+        {debugMode && (
+          <div className="text-gray-400 text-xs mt-1">
+            <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs mr-1">Ctrl+D</kbd>
+            debug
+          </div>
+        )}
       </div>
     </div>
   );

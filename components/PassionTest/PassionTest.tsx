@@ -90,8 +90,19 @@ const PassionTest: React.FC<{ onComplete?: () => void }> = ({ onComplete }) => {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center p-6 bg-gray-800 rounded-lg shadow-xl text-white h-full max-h-[80vh] w-full max-w-2xl overflow-y-auto">
-        <ArrowPathIcon className="h-12 w-12 text-blue-400 animate-spin mb-4" />
-        <p className="text-xl">Analyzing your passions... This might take a moment.</p>
+        <div className="relative">
+          <ArrowPathIcon className="h-16 w-16 text-blue-400 animate-spin mb-4" />
+          {/* Animated dots around the spinner */}
+          <div className="absolute -inset-8 flex items-center justify-center">
+            <div className="animate-ping absolute inline-flex h-8 w-8 rounded-full bg-blue-400 opacity-30"></div>
+          </div>
+        </div>
+        <h3 className="text-xl font-semibold mb-2">Discovering Your Passions...</h3>
+        <p className="text-gray-300 text-center">Our AI is analyzing your responses to create personalized insights for your tree.</p>
+        <div className="mt-4 w-48 bg-gray-700 rounded-full h-2">
+          <div className="bg-blue-400 h-2 rounded-full animate-pulse" style={{ width: '75%' }}></div>
+        </div>
+        <p className="text-sm text-gray-400 mt-2">This usually takes 10-30 seconds...</p>
       </div>
     );
   }
@@ -138,9 +149,18 @@ const PassionTest: React.FC<{ onComplete?: () => void }> = ({ onComplete }) => {
           <p className="text-gray-200 italic bg-gray-700 p-3 rounded-md">{passionTestResult.personalized_insights || "No specific insights generated."}</p>
         </div>
         
+        <div className="p-4 bg-gradient-to-r from-green-600 to-blue-600 rounded-lg mb-6">
+          <p className="text-center text-white font-semibold">
+            🌱 Ready to plant these insights into your Productivitree? 
+          </p>
+          <p className="text-center text-green-100 text-sm mt-1">
+            Click "Continue to Plant Roots" to use these suggestions in your tree setup!
+          </p>
+        </div>
+        
         <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4">
             <Button onClick={handleDone} variant="primary" className="w-full sm:w-auto">
-             Done & Grow!
+              Continue to Plant Roots 🌱
             </Button>
             <Button onClick={handleRetakeTest} variant="secondary" className="w-full sm:w-auto">
                 Retake Test
