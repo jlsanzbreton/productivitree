@@ -52,21 +52,22 @@ class IntegratedOrganicTreeRenderer {
     if (!this.context || !this.config.showRoots) return;
 
     rootNodes.forEach(root => {
-      this.context!.strokeStyle = root.color || '#8B4513';
+      this.context!.strokeStyle = root.color || '#DC143C'; // Rojo carmesí por defecto
       this.context!.lineWidth = root.thickness || 3;
+      this.context!.lineCap = 'round';
       
       if (root.curve) {
         this.context!.beginPath();
-        this.context!.moveTo(root.x, root.y);
+        this.context!.moveTo(root.curve.startX, root.curve.startY);
         this.context!.bezierCurveTo(
           root.curve.cp1x, root.curve.cp1y,
           root.curve.cp2x, root.curve.cp2y,
-          root.x, root.y
+          root.curve.endX, root.curve.endY
         );
         this.context!.stroke();
       }
 
-      this.context!.fillStyle = root.color || '#8B4513';
+      this.context!.fillStyle = root.color || '#DC143C'; // Rojo carmesí por defecto
       this.context!.beginPath();
       this.context!.arc(root.x, root.y, root.size / 2, 0, Math.PI * 2);
       this.context!.fill();
@@ -108,17 +109,19 @@ class IntegratedOrganicTreeRenderer {
       this.context!.lineWidth = branch.thickness || 5;
       this.context!.lineCap = 'round';
 
+      // Renderizar la rama como una línea con curva
       if (branch.curve) {
         this.context!.beginPath();
-        this.context!.moveTo(branch.x, branch.y);
+        this.context!.moveTo(branch.curve.startX, branch.curve.startY);
         this.context!.bezierCurveTo(
           branch.curve.cp1x, branch.curve.cp1y,
           branch.curve.cp2x, branch.curve.cp2y,
-          branch.x, branch.y
+          branch.curve.endX, branch.curve.endY
         );
         this.context!.stroke();
       }
 
+      // Dibujar el final de la rama
       this.context!.fillStyle = branch.color || '#228B22';
       this.context!.beginPath();
       this.context!.arc(branch.x, branch.y, branch.size / 2, 0, Math.PI * 2);

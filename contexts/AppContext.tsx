@@ -94,7 +94,7 @@ const initialTasks: TaskData[] = [
 ];
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  console.log('APPCONTEXT.TSX: AppProvider component start');
+  // ✅ Console.log removido para evitar spam durante re-renders
   
   // State initializations from user's proposal (robust localStorage parsing)
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -261,14 +261,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     try { localStorage.setItem('productivitree-background', activeBackground); }
     catch (e) { console.error("Failed to save activeBackground to localStorage", e); }
-    setCurrentUser(prev => prev ? ({...prev, backgroundSetting: activeBackground}) : null);
-  }, [activeBackground, setCurrentUser]); // Removed currentUser from deps
+    // NO actualizar currentUser aquí para evitar loops
+  }, [activeBackground]); // ✅ Removed setCurrentUser from deps
 
   useEffect(() => {
     try { localStorage.setItem('productivitree-treeTheme', activeTreeTheme); }
     catch (e) { console.error("Failed to save activeTreeTheme to localStorage", e); }
-    setCurrentUser(prev => prev ? ({...prev, treeTheme: activeTreeTheme}) : null);
-  }, [activeTreeTheme, setCurrentUser]); // Removed currentUser from deps
+    // NO actualizar currentUser aquí para evitar loops
+  }, [activeTreeTheme]); // ✅ Removed setCurrentUser from deps
 
 
   useEffect(() => {
@@ -280,6 +280,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try { localStorage.setItem('productivitree-onboardingComplete', String(isOnboardingComplete)); }
     catch (e) { console.error("Failed to save onboardingComplete to localStorage", e); }
   }, [isOnboardingComplete]);
+
+  // ✅ NO sincronizamos currentUser automáticamente para evitar loops
+  // En su lugar, el currentUser se actualizará explícitamente cuando sea necesario
+  // por ejemplo, en funciones específicas o en response a acciones del usuario
 
   const waterTree = useCallback(() => {
     setTreeHealth(prev => Math.min(100, prev + 10));
