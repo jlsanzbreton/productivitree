@@ -4,7 +4,7 @@ import PassionTest from '../PassionTest/PassionTest';
 import { Button } from '../UI/Button';
 import { ONBOARDING_STEPS_CONFIG, backgroundThemes, treeThemes, DEFAULT_USER_ID } from '../../constants';
 import { CheckCircleIcon, ChevronRightIcon, ArrowPathIcon, LightBulbIcon } from '../Icons/HeroIcons';
-import { RootData, TaskData, LeafStatus, ProjectData } from '../../types';
+import { RootData, ProjectData } from '../../types';
 
 
 const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
@@ -17,9 +17,8 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
     setCurrentUser,
     setRoots,
     setProjects, // Para crear proyectos (ramas)
-    activeBackground, setActiveBackground,
-    activeTreeTheme, setActiveTreeTheme,
-    setCurrentTasks,
+  activeBackground, setActiveBackground,
+  activeTreeTheme, setActiveTreeTheme,
     // Nuevo: para gestión de experiencia
     experienceAreas,
     analyzeExperience

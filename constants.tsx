@@ -131,6 +131,7 @@ export const ONBOARDING_STEPS_CONFIG = [
   { id: 'welcome', title: 'Welcome to Productivitree!', description: 'Let\'s get your productivity tree growing.' },
   { id: 'passion_test', title: 'Discover Your Passions', description: 'A quick test to find what truly motivates you. This will help shape your tree\'s roots.' },
   { id: 'define_roots', title: 'Define Your Roots', description: 'Based on your passions, establish 3-5 core values or motivations.' },
+  { id: 'experience_mapping', title: 'Map Your Experience', description: 'Describe your formation and experience to build your tree\'s trunk with AI.' },
   { id: 'first_projects', title: 'Plant Your First Branches', description: 'Let\'s add 1-2 initial projects or goals you want to work on.' },
   { id: 'tree_customization', title: 'Customize Your View', description: 'Choose an initial theme and background for your Productivitree.' },
   { id: 'done', title: 'All Set!', description: 'Your Productivitree is ready to grow. Start adding tasks and watch it flourish!' },
