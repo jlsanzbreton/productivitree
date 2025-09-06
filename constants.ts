@@ -2,6 +2,37 @@
 import React from 'react';
 import { LeafStatus, TreeNode } from './types';
 
+// --- Global Tree Palette and Styles ---
+export const TREE_PALETTE = {
+  trunk: {
+    base: '#8B4513',
+    gradient: ['#8B4513', '#A0522D'],
+  },
+  leaves: {
+    base: '#22c55e',
+    gradient: ['#86efac', '#16a34a'],
+  },
+};
+
+export const TREE_SIZES = {
+  leaf: {
+    small: 4,
+    medium: 8,
+    large: 12,
+  },
+  trunk: {
+    width: 20,
+  },
+};
+
+// Small SVG textures for trunk and leaves
+export const TREE_TEXTURES = {
+  trunk:
+    'data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPScyMCcgaGVpZ2h0PScyMCc+PHJlY3Qgd2lkdGg9JzIwJyBoZWlnaHQ9JzIwJyBmaWxsPScjOEI0NTEzJy8+PHBhdGggZD0nTTUgMHYyME0xMCAwdjIwTTE1IDB2MjAnIHN0cm9rZT0nI0EwNTIyRCcgc3Ryb2tlLXdpZHRoPScyJy8+PC9zdmc+',
+  leaf:
+    'data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPScyMCcgaGVpZ2h0PScyMCc+PGNpcmNsZSBjeD0nMTAnIGN5PScxMCcgcj0nMTAnIGZpbGw9JyMyMmM1NWUnLz48cGF0aCBkPSdNMTAgMEwxMCAyME0wIDEwTDIwIDEwJyBzdHJva2U9JyMxNmEzNGEnIHN0cm9rZS13aWR0aD0nMScvPjwvc3ZnPg==',
+};
+
 // --- Leaf Style Constants ---
 export const leafColors: Record<LeafStatus, { gradient: string; shadow: string; animation?: string }> = {
   [LeafStatus.Pending]: {
