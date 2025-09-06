@@ -1,12 +1,12 @@
 
 console.log('APP.TSX: Script start');
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext, useEffect, Suspense } from 'react';
 import Header from './components/Layout/Header';
 import Footer from './components/Layout/Footer';
-import TreeVisualizationCanvas from './components/TreeVisualization/TreeVisualizationCanvas';
-import PassionTest from './components/PassionTest/PassionTest';
-import OnboardingFlow from './components/Onboarding/OnboardingFlow';
 import TaskModal from './components/TaskModal/TaskModal';
+const TreeVisualizationCanvas = React.lazy(() => import('./components/TreeVisualization/TreeVisualizationCanvas'));
+const PassionTest = React.lazy(() => import('./components/PassionTest/PassionTest'));
+const OnboardingFlow = React.lazy(() => import('./components/Onboarding/OnboardingFlow'));
 import { AppContext, AppContextType } from './contexts/AppContext';
 import { backgroundThemes } from './constants'; // Path is fine for root constants.ts
 // LeafStatus import might not be needed if App.tsx doesn't directly use it.
@@ -81,23 +81,31 @@ const App: React.FC = () => {
           </div>
         )}
         
-        {currentPage === Page.Onboarding && <OnboardingFlow onComplete={() => {
-          // setIsOnboardingComplete(true) is handled within OnboardingFlow.
-          // App's useEffect will then change currentPage to Page.Tree.
-          // So, this onComplete can be empty or for logging.
-          console.log("Onboarding complete callback in App.tsx");
-        }} />}
-        
+        {currentPage === Page.Onboarding && (
+          <Suspense fallback={<div>Loading...</div>}>
+            <OnboardingFlow onComplete={() => {
+              // setIsOnboardingComplete(true) is handled within OnboardingFlow.
+              // App's useEffect will then change currentPage to Page.Tree.
+              // So, this onComplete can be empty or for logging.
+              console.log("Onboarding complete callback in App.tsx");
+            }} />
+          </Suspense>
+        )}
+
         {/* This PassionTest is for revisiting AFTER onboarding is complete */}
         {currentPage === Page.PassionTest && isOnboardingComplete && (
-          <PassionTest onComplete={() => { 
-            setShowPassionTest(false); 
-            // App's useEffect will naturally switch currentPage back to Page.Tree
-          }} />
+          <Suspense fallback={<div>Loading...</div>}>
+            <PassionTest onComplete={() => {
+              setShowPassionTest(false);
+              // App's useEffect will naturally switch currentPage back to Page.Tree
+            }} />
+          </Suspense>
         )}
-        
+
         {currentPage === Page.Tree && isOnboardingComplete && (
-          <TreeVisualizationCanvas treeData={treeData} onLeafClick={(nodeId: string) => handleTaskModalOpen(nodeId)} />
+          <Suspense fallback={<div>Loading...</div>}>
+            <TreeVisualizationCanvas treeData={treeData} onLeafClick={(nodeId: string) => handleTaskModalOpen(nodeId)} />
+          </Suspense>
         )}
 
         {showTaskModal && (

@@ -44,6 +44,8 @@ class OrganicTreeRenderer {
 
   public render(layout: OrganicLayoutResult, _callbacks: OrganicInteractionCallbacks): void {
     this.storedLayout = layout;
+    if (!this.context) return;
+
     if (this.animationFrameId) {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
@@ -87,7 +89,7 @@ class OrganicTreeRenderer {
     if (!this.context || !this.config.showRoots) return;
 
     rootNodes.forEach(root => {
-      this.context!.strokeStyle = root.color || '#DC143C'; // Rojo carmesí por defecto
+      this.context!.strokeStyle = root.color || '#DC143C';
       this.context!.lineWidth = root.thickness || 3;
       this.context!.lineCap = 'round';
       
@@ -102,7 +104,7 @@ class OrganicTreeRenderer {
         this.context!.stroke();
       }
 
-      this.context!.fillStyle = root.color || '#DC143C'; // Rojo carmesí por defecto
+      this.context!.fillStyle = root.color || '#DC143C';
       this.context!.beginPath();
       this.context!.arc(root.x, root.y, root.size / 2, 0, Math.PI * 2);
       this.context!.fill();
@@ -144,7 +146,6 @@ class OrganicTreeRenderer {
       this.context!.lineWidth = branch.thickness || 5;
       this.context!.lineCap = 'round';
 
-      // Renderizar la rama como una línea con curva
       if (branch.curve) {
         this.context!.beginPath();
         this.context!.moveTo(branch.curve.startX, branch.curve.startY);
@@ -156,7 +157,6 @@ class OrganicTreeRenderer {
         this.context!.stroke();
       }
 
-      // Dibujar el final de la rama
       this.context!.fillStyle = this.trunkPattern || branch.color || TREE_PALETTE.trunk.base;
       this.context!.beginPath();
       this.context!.arc(branch.x, branch.y, branch.size / 2, 0, Math.PI * 2);
@@ -171,7 +171,6 @@ class OrganicTreeRenderer {
       const taskData = leaf.data as TaskData;
 
       let leafColor = this.getLeafColor(taskData.status);
-
       if (this.config.theme === 'winter') {
         leafColor = 'rgba(255, 255, 255, 0.3)';
       }
@@ -188,15 +187,12 @@ class OrganicTreeRenderer {
     if (!this.context) return;
 
     const size = leaf.size;
-
     this.context!.save();
     this.context!.translate(leaf.x, leaf.y);
     this.context!.rotate(angle);
-
     this.context!.beginPath();
     this.context!.ellipse(0, 0, size * 1.5, size, 0, 0, Math.PI * 2);
     this.context!.fill();
-
     this.context!.restore();
   }
 
@@ -208,15 +204,12 @@ class OrganicTreeRenderer {
       [LeafStatus.Completed]: '#9ca3af',
       [LeafStatus.RecentActivity]: '#84cc16'
     };
-    
     return colorMap[status] || '#9ca3af';
   }
 
   public renderGround(groundY: number): void {
     if (!this.context) return;
-
     const { width } = this.config.canvas;
-    
     this.context!.strokeStyle = 'rgba(139, 69, 19, 0.3)';
     this.context!.lineWidth = 2;
     this.context!.beginPath();
@@ -226,5 +219,4 @@ class OrganicTreeRenderer {
   }
 }
 
-// Export explícito
 export { OrganicTreeRenderer };
