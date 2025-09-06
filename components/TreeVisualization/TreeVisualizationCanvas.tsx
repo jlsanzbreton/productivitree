@@ -3,6 +3,7 @@ import React, { useRef, useEffect, useContext, useState, useCallback } from 'rea
 import { TreeNode, TaskData, LeafStatus } from '../../types';
 import { AppContext, AppContextType } from '../../contexts/AppContext';
 import OrganicTreeLayout, { OrganicTreeConfig, OrganicNode, OrganicLayoutResult } from './OrganicTreeLayout';
+import { TREE_PALETTE, TREE_TEXTURES } from '../../constants';
 
 interface OrganicRenderConfig {
   canvas: HTMLCanvasElement;
@@ -11,6 +12,8 @@ interface OrganicRenderConfig {
   showTrunkSections?: boolean;
   enableAnimations?: boolean;
   healthFactor: number;
+  windIntensity?: number;
+  useTextures?: boolean;
 }
 
 interface OrganicInteractionCallbacks {
@@ -23,16 +26,22 @@ interface OrganicInteractionCallbacks {
 class IntegratedOrganicTreeRenderer {
   private config: OrganicRenderConfig;
   private context: CanvasRenderingContext2D | null = null;
+  private trunkPattern: CanvasPattern | null = null;
+  private leafPattern: CanvasPattern | null = null;
 
   constructor(config: OrganicRenderConfig) {
     this.config = config;
     this.context = config.canvas.getContext('2d');
+    this.initTextures();
   }
 
   public updateConfig(newConfig: Partial<OrganicRenderConfig>): void {
     this.config = { ...this.config, ...newConfig };
     if (newConfig.canvas) {
       this.context = newConfig.canvas.getContext('2d');
+    }
+    if (newConfig.canvas || typeof newConfig.useTextures !== 'undefined') {
+      this.initTextures();
     }
   }
 
@@ -46,6 +55,22 @@ class IntegratedOrganicTreeRenderer {
     this.renderTrunkSections(layout.nodes.filter(n => n.type === 'trunk'));
     this.renderBranches(layout.nodes.filter(n => n.type === 'branch'));
     this.renderLeaves(layout.nodes.filter(n => n.type === 'leaf'));
+  }
+
+  private initTextures(): void {
+    if (!this.context || !this.config.useTextures) return;
+
+    const trunkImg = new Image();
+    trunkImg.src = TREE_TEXTURES.trunk;
+    trunkImg.onload = () => {
+      this.trunkPattern = this.context!.createPattern(trunkImg, 'repeat');
+    };
+
+    const leafImg = new Image();
+    leafImg.src = TREE_TEXTURES.leaf;
+    leafImg.onload = () => {
+      this.leafPattern = this.context!.createPattern(leafImg, 'repeat');
+    };
   }
 
   private renderRoots(rootNodes: OrganicNode[]): void {
@@ -83,7 +108,7 @@ class IntegratedOrganicTreeRenderer {
       const section = sortedTrunk[i];
       const nextSection = sortedTrunk[i + 1];
 
-      this.context!.fillStyle = section.color || '#8B4513';
+  this.context!.fillStyle = (this.config.useTextures && this.trunkPattern) || section.color || TREE_PALETTE.trunk.base;
       
       if (nextSection) {
         this.context!.beginPath();
@@ -105,7 +130,7 @@ class IntegratedOrganicTreeRenderer {
     if (!this.context) return;
 
     branchNodes.forEach(branch => {
-      this.context!.strokeStyle = branch.color || '#228B22';
+  this.context!.strokeStyle = (this.config.useTextures && this.trunkPattern) || branch.color || TREE_PALETTE.trunk.base;
       this.context!.lineWidth = branch.thickness || 5;
       this.context!.lineCap = 'round';
 
@@ -122,7 +147,7 @@ class IntegratedOrganicTreeRenderer {
       }
 
       // Dibujar el final de la rama
-      this.context!.fillStyle = branch.color || '#228B22';
+  this.context!.fillStyle = (this.config.useTextures && this.trunkPattern) || branch.color || TREE_PALETTE.trunk.base;
       this.context!.beginPath();
       this.context!.arc(branch.x, branch.y, branch.size / 2, 0, Math.PI * 2);
       this.context!.fill();
@@ -141,16 +166,19 @@ class IntegratedOrganicTreeRenderer {
         leafColor = 'rgba(255, 255, 255, 0.3)';
       }
 
-      this.context!.fillStyle = leafColor;
-      this.drawLeafShape(leaf);
+      const t = this.config.enableAnimations ? performance.now() : 0;
+      const windOffset = Math.sin(t / 1000 + leaf.x) * (this.config.windIntensity || 0);
+      const angle = (leaf.angle || 0) + windOffset;
+
+      this.context!.fillStyle = (this.config.useTextures && this.leafPattern) || leafColor;
+      this.drawLeafShape(leaf, angle);
     });
   }
 
-  private drawLeafShape(leaf: OrganicNode): void {
+  private drawLeafShape(leaf: OrganicNode, angle: number): void {
     if (!this.context) return;
 
     const size = leaf.size;
-    const angle = leaf.angle || 0;
 
     this.context!.save();
     this.context!.translate(leaf.x, leaf.y);

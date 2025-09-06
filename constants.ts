@@ -2,7 +2,7 @@
 import React from 'react';
 import { LeafStatus, TreeNode } from './types';
 
-// --- Global Tree Palette and Styles ---
+// --- Global Tree Palette and Textures ---
 export const TREE_PALETTE = {
   trunk: {
     base: '#8B4513',
@@ -25,7 +25,7 @@ export const TREE_SIZES = {
   },
 };
 
-// Small SVG textures for trunk and leaves
+// Small embedded SVG textures for trunk and leaves
 export const TREE_TEXTURES = {
   trunk:
     'data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPScyMCcgaGVpZ2h0PScyMCc+PHJlY3Qgd2lkdGg9JzIwJyBoZWlnaHQ9JzIwJyBmaWxsPScjOEI0NTEzJy8+PHBhdGggZD0nTTUgMHYyME0xMCAwdjIwTTE1IDB2MjAnIHN0cm9rZT0nI0EwNTIyRCcgc3Ryb2tlLXdpZHRoPScyJy8+PC9zdmc+',
