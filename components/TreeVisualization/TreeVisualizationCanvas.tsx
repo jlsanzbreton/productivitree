@@ -32,7 +32,8 @@ interface BranchPath {
   cp1: Point;
   cp2: Point;
   end: Point;
-  width: number;
+  startWidth: number;
+  tipWidth: number;
   leafCount: number;
   growthScale: number;
   node: TreeNode;
@@ -62,6 +63,21 @@ const stringHash = (value: string) =>
   value.split('').reduce((acc, char) => (acc * 31 + char.charCodeAt(0)) % 100000, 7);
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+const lerp = (start: number, end: number, t: number) => start + (end - start) * t;
+const cubicPoint = (p0: Point, p1: Point, p2: Point, p3: Point, t: number): Point => {
+  const mt = 1 - t;
+  return {
+    x: mt ** 3 * p0.x + 3 * mt ** 2 * t * p1.x + 3 * mt * t ** 2 * p2.x + t ** 3 * p3.x,
+    y: mt ** 3 * p0.y + 3 * mt ** 2 * t * p1.y + 3 * mt * t ** 2 * p2.y + t ** 3 * p3.y,
+  };
+};
+const cubicTangent = (p0: Point, p1: Point, p2: Point, p3: Point, t: number): Point => {
+  const mt = 1 - t;
+  return {
+    x: 3 * mt ** 2 * (p1.x - p0.x) + 6 * mt * t * (p2.x - p1.x) + 3 * t ** 2 * (p3.x - p2.x),
+    y: 3 * mt ** 2 * (p1.y - p0.y) + 6 * mt * t * (p2.y - p1.y) + 3 * t ** 2 * (p3.y - p2.y),
+  };
+};
 
 const parseTree = (treeData: TreeNode) => {
   const roots: TreeNode[] = [];
@@ -205,6 +221,8 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
       canvas.style.height = `${h}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
 
       const dt = lastFrameRef.current > 0 ? time - lastFrameRef.current : 16;
       lastFrameRef.current = time;
@@ -320,83 +338,41 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
         });
       });
 
-      const trunkTopY = treeSpecies === 'fir' ? h * 0.12 : h * 0.18;
-      const trunkMidY = h * 0.48;
-      const trunkTopX = trunkX + swayAt(trunkTopY) * (treeSpecies === 'fir' ? 0.4 : 1);
-      const trunkMidX = trunkX + swayAt(trunkMidY) * 0.7;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
 
-      const drawTrunkSegment = (
-        fromX: number,
-        fromY: number,
-        cpX: number,
-        cpY: number,
-        toX: number,
-        toY: number,
-        widthValue: number
-      ) => {
-        ctx.strokeStyle = palette.trunk;
-        ctx.lineCap = 'round';
-        ctx.lineWidth = widthValue;
-        ctx.shadowColor = palette.glow;
-        ctx.shadowBlur = 14;
-        ctx.beginPath();
-        ctx.moveTo(fromX, fromY);
-        ctx.bezierCurveTo(cpX, cpY, cpX, cpY, toX, toY);
-        ctx.stroke();
-        ctx.shadowBlur = 0;
+      const trunkTopY = treeSpecies === 'fir' ? h * 0.1 : h * 0.16;
+      const trunkBasePoint: Point = { x: trunkX, y: groundY };
+      const trunkC1: Point =
+        treeSpecies === 'fir'
+          ? { x: trunkX + swayAt(h * 0.58) * 0.12, y: h * 0.62 }
+          : treeSpecies === 'cherry'
+            ? { x: trunkX - 14 + swayAt(h * 0.62) * 0.55, y: h * 0.64 }
+            : { x: trunkX - 10 + swayAt(h * 0.62) * 0.42, y: h * 0.64 };
+      const trunkC2: Point =
+        treeSpecies === 'fir'
+          ? { x: trunkX + swayAt(h * 0.3) * 0.14, y: h * 0.34 }
+          : treeSpecies === 'cherry'
+            ? { x: trunkX + 10 + swayAt(h * 0.3) * 0.72, y: h * 0.3 }
+            : { x: trunkX + 8 + swayAt(h * 0.3) * 0.58, y: h * 0.3 };
+      const trunkTopPoint: Point = {
+        x: trunkX + swayAt(trunkTopY) * (treeSpecies === 'fir' ? 0.24 : 0.62),
+        y: trunkTopY,
       };
 
-      if (treeSpecies === 'oak') {
-        drawTrunkSegment(trunkX, groundY, trunkX - 14 + swayAt(h * 0.67), h * 0.63, trunkMidX, trunkMidY, 34 * healthFactor);
-        drawTrunkSegment(
-          trunkMidX,
-          trunkMidY,
-          trunkMidX + 7 + swayAt(h * 0.3),
-          h * 0.28,
-          trunkTopX,
-          trunkTopY,
-          18 * healthFactor
-        );
-      } else if (treeSpecies === 'fir') {
-        drawTrunkSegment(trunkX, groundY, trunkX + swayAt(h * 0.45) * 0.25, h * 0.5, trunkMidX, trunkMidY, 22 * healthFactor);
-        drawTrunkSegment(trunkMidX, trunkMidY, trunkTopX, h * 0.26, trunkTopX, trunkTopY, 12 * healthFactor);
-      } else {
-        drawTrunkSegment(trunkX, groundY, trunkX - 12 + swayAt(h * 0.58), h * 0.62, trunkMidX, trunkMidY, 26 * healthFactor);
-        drawTrunkSegment(
-          trunkMidX,
-          trunkMidY,
-          trunkMidX + 6 + swayAt(h * 0.27) * 0.8,
-          h * 0.26,
-          trunkTopX,
-          trunkTopY,
-          11 * healthFactor
-        );
-      }
-
-      const trunkNodes = parsed.trunks.filter((node) => node.id !== 'trunk-hub');
-      trunkNodes.forEach((node, index) => {
-        const y = groundY - (index + 1) * ((groundY - trunkTopY) / Math.max(trunkNodes.length + 1, 2));
-        const x = trunkX + swayAt(y) * 0.45;
-        ctx.fillStyle = palette.trunk;
-        ctx.shadowColor = palette.glow;
-        ctx.shadowBlur = 10;
-        ctx.beginPath();
-        ctx.arc(x, y, 6.8, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-
-        hitNodes.push({
-          id: node.id,
-          x,
-          y,
-          r: 11,
-          node,
-          label: String((node.data as Record<string, unknown>)?.title || 'Skill Segment'),
-        });
-      });
+      const trunkPointAt = (t: number) => cubicPoint(trunkBasePoint, trunkC1, trunkC2, trunkTopPoint, t);
+      const trunkTangentAt = (t: number) => {
+        const tangent = cubicTangent(trunkBasePoint, trunkC1, trunkC2, trunkTopPoint, t);
+        const length = Math.max(0.001, Math.hypot(tangent.x, tangent.y));
+        const normalized = { x: tangent.x / length, y: tangent.y / length };
+        return normalized.y > 0 ? { x: -normalized.x, y: -normalized.y } : normalized;
+      };
+      const trunkTFromY = (y: number) => clamp((groundY - y) / Math.max(1, groundY - trunkTopY), 0, 1);
+      const trunkPointAtY = (y: number) => trunkPointAt(trunkTFromY(y));
+      const trunkTangentAtY = (y: number) => trunkTangentAt(trunkTFromY(y));
 
       const branches = parsed.branches;
-      const branchPaths: BranchPath[] = branches.map((branch, index) => {
+      const branchSkeletons = branches.map((branch, index) => {
         const total = Math.max(1, branches.length);
         const ratio = total === 1 ? 0.5 : index / (total - 1);
         const side = index % 2 === 0 ? -1 : 1;
@@ -405,102 +381,177 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
         let lengthScale = clamp(0.32 + Math.log2(leafCount + 1) * 0.5, 0.32, 2.08);
         let widthScale = clamp(0.28 + Math.log2(leafCount + 1) * 0.44, 0.28, 1.86);
         if (leafCount <= 1) {
-          lengthScale *= 0.7;
-          widthScale *= 0.64;
+          lengthScale *= 0.68;
+          widthScale *= 0.62;
         }
         const growthScale = clamp((lengthScale + widthScale) / 2, 0.22, 1.92);
+
+        let startY = h * (0.33 + ratio * 0.31);
+        let span = w * (0.16 + ratio * 0.12) * lengthScale;
+        let endYOffset = 0;
 
         if (treeSpecies === 'fir') {
           const layer = index % Math.max(3, Math.ceil(total / 2));
           const layerRatio = layer / Math.max(1, Math.ceil(total / 2) - 1);
-          const startY = h * (0.25 + ratio * 0.43);
-          const span = (w * (0.12 + (1 - layerRatio) * 0.2)) * (1 + (1 - healthFactor) * 0.2) * lengthScale;
-          const end = {
-            x: trunkX + side * span + swayAt(startY) * 0.6,
-            y: startY + (16 + layer * 7) * clamp(0.82 + lengthScale * 0.28, 0.78, 1.42),
-          };
-
-          return {
-            id: branch.id,
-            node: branch,
-            start: { x: trunkX + swayAt(startY) * 0.18, y: startY },
-            cp1: { x: trunkX + side * span * 0.35, y: startY + 2 },
-            cp2: { x: end.x - side * 14, y: end.y - 4 },
-            end,
-            width: clamp((10 - ratio * 4.8) * healthFactor * widthScale, 1.5, 14),
-            leafCount,
-            growthScale,
-          };
+          startY = h * (0.2 + ratio * 0.48);
+          span = w * (0.11 + (1 - layerRatio) * 0.2) * lengthScale;
+          endYOffset = 10 + layer * 5 + lengthScale * 3;
+        } else if (treeSpecies === 'cherry') {
+          startY = h * (0.28 + ratio * 0.32);
+          span = w * (0.2 + ratio * 0.16) * lengthScale;
+          endYOffset = 4 + lengthScale * 2;
         }
 
-        if (treeSpecies === 'cherry') {
-          const spread = w * (0.2 + ratio * 0.12);
-          const startY = h * (0.34 + ratio * 0.28);
-          const reach = spread * (1.35 + (ratio - 0.5) * 0.2) * lengthScale;
-          const upward = 24 + Math.abs(0.5 - ratio) * 34;
-          const end = {
-            x: trunkX + side * reach + swayAt(startY) * 1.25,
-            y: startY - upward * clamp(0.82 + lengthScale * 0.22, 0.78, 1.3) + (index % 3) * 6,
-          };
+        const trunkAnchor = trunkPointAtY(startY);
+        const trunkDirection = trunkTangentAtY(startY);
+        const trunkNormal = { x: -trunkDirection.y, y: trunkDirection.x };
 
-          return {
-            id: branch.id,
-            node: branch,
-            start: { x: trunkX + swayAt(startY) * 0.42, y: startY },
-            cp1: { x: trunkX + side * 26, y: startY - 12 },
-            cp2: { x: end.x - side * (56 + ratio * 28), y: end.y + 16 },
-            end,
-            width: clamp((7.8 - ratio * 3.2) * healthFactor * widthScale, 1.4, 10.5),
-            leafCount,
-            growthScale,
-          };
-        }
-
-        const angle = -Math.PI * 0.88 + ratio * Math.PI * 0.76;
-        const radiusX = w * 0.22 * lengthScale;
-        const radiusY = h * 0.22 * clamp(0.8 + lengthScale * 0.24, 0.74, 1.32);
-        const startY = h * (0.43 + ratio * 0.22);
-        const end = {
-          x: trunkX + Math.cos(angle) * radiusX + swayAt(startY) * 1.15,
-          y: h * 0.33 + Math.sin(angle) * radiusY,
+        const approxBaseWidth =
+          (treeSpecies === 'oak' ? 34 : treeSpecies === 'fir' ? 22 : 26) * healthFactor;
+        const approxTopWidth =
+          (treeSpecies === 'oak' ? 10 : treeSpecies === 'fir' ? 8 : 9) * healthFactor;
+        const approxTrunkWidth = lerp(approxBaseWidth, approxTopWidth, trunkTFromY(startY));
+        const barkOffset = approxTrunkWidth * 0.18;
+        const start: Point = {
+          x: trunkAnchor.x + trunkNormal.x * side * barkOffset,
+          y: trunkAnchor.y,
         };
-        const direction = end.x >= trunkX ? 1 : -1;
+
+        const lift = 22 + 8 * lengthScale;
+        const gravity = 10 + 14 * lengthScale + Math.abs(ratio - 0.5) * 10 + endYOffset;
+        const end: Point = {
+          x: start.x + side * span + swayAt(startY) * (treeSpecies === 'fir' ? 0.45 : 0.85),
+          y: start.y - lift + gravity,
+        };
+
+        const cp1Distance = 24 + 14 * lengthScale;
+        const cp1: Point = {
+          // Y-shaped tangential birth: first control follows trunk direction upward.
+          x: start.x + trunkDirection.x * cp1Distance,
+          y: start.y + trunkDirection.y * cp1Distance,
+        };
+
+        const cp2Out = span * (treeSpecies === 'fir' ? 0.58 : treeSpecies === 'cherry' ? 0.78 : 0.68);
+        const cp2: Point = {
+          x: start.x + side * cp2Out,
+          // Long branches start rising, then bend and slightly drop by weight.
+          y: end.y - (8 - Math.min(6, lengthScale * 3)),
+        };
 
         return {
           id: branch.id,
           node: branch,
-          start: { x: trunkX + swayAt(startY) * 0.32, y: startY },
-          cp1: { x: trunkX + direction * 34, y: startY - 34 },
-          cp2: { x: end.x - direction * 34, y: end.y + 12 },
-          end,
-          width: clamp((9.5 - ratio * 3.4) * healthFactor * widthScale, 1.4, 13),
           leafCount,
           growthScale,
+          start,
+          cp1,
+          cp2,
+          end,
+          startY,
         };
       });
 
-      branchPaths.forEach((branchPath) => {
+      const branchStartYs = branchSkeletons.map((branch) => branch.startY);
+      const baseTrunkWidth = (treeSpecies === 'oak' ? 34 : treeSpecies === 'fir' ? 22 : 26) * healthFactor;
+      const topTrunkWidth = (treeSpecies === 'oak' ? 9 : treeSpecies === 'fir' ? 7 : 8) * healthFactor;
+      const trunkWidthAtY = (y: number) => {
+        const t = trunkTFromY(y);
+        const releasedBranches = branchStartYs.filter((startY) => startY > y).length;
+        const releaseFactor = 1 - clamp(releasedBranches * 0.024, 0, 0.42);
+        return clamp(lerp(baseTrunkWidth, topTrunkWidth, t) * releaseFactor, 4, baseTrunkWidth);
+      };
+
+      ctx.strokeStyle = palette.trunk;
+      ctx.shadowColor = palette.glow;
+      ctx.shadowBlur = 14;
+      const trunkSegments = 24;
+      for (let index = 0; index < trunkSegments; index += 1) {
+        const t0 = index / trunkSegments;
+        const t1 = (index + 1) / trunkSegments;
+        const p0 = trunkPointAt(t0);
+        const p1 = trunkPointAt(t1);
+        const yMid = (p0.y + p1.y) / 2;
+        ctx.lineWidth = trunkWidthAtY(yMid);
+        ctx.beginPath();
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+        ctx.stroke();
+      }
+      ctx.shadowBlur = 0;
+
+      const trunkNodes = parsed.trunks.filter((node) => node.id !== 'trunk-hub');
+      trunkNodes.forEach((node, index) => {
+        const y = groundY - (index + 1) * ((groundY - trunkTopY) / Math.max(trunkNodes.length + 1, 2));
+        const point = trunkPointAtY(y);
+        ctx.fillStyle = palette.trunk;
+        ctx.shadowColor = palette.glow;
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 6.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        hitNodes.push({
+          id: node.id,
+          x: point.x,
+          y: point.y,
+          r: 11,
+          node,
+          label: String((node.data as Record<string, unknown>)?.title || 'Skill Segment'),
+        });
+      });
+
+      const branchPaths: BranchPath[] = branchSkeletons.map((skeleton) => {
+        const trunkWidth = trunkWidthAtY(skeleton.start.y);
+        const startWidth = clamp(
+          trunkWidth * (0.36 + skeleton.growthScale * 0.16),
+          1.8,
+          Math.max(3.2, trunkWidth * 0.72)
+        );
+        const tipWidth = clamp(startWidth * (0.2 + skeleton.growthScale * 0.06), 0.7, 3.8);
+
+        return {
+          id: skeleton.id,
+          start: skeleton.start,
+          cp1: skeleton.cp1,
+          cp2: skeleton.cp2,
+          end: skeleton.end,
+          leafCount: skeleton.leafCount,
+          growthScale: skeleton.growthScale,
+          node: skeleton.node,
+          startWidth,
+          tipWidth,
+        };
+      });
+
+      const drawTaperedBranch = (branchPath: BranchPath) => {
         ctx.strokeStyle = palette.branch;
-        ctx.lineCap = 'round';
-        ctx.lineWidth = Math.max(1.4, branchPath.width);
         ctx.shadowColor = palette.glow;
         ctx.shadowBlur = 8 + branchPath.growthScale * 4;
-        ctx.beginPath();
-        ctx.moveTo(branchPath.start.x, branchPath.start.y);
-        ctx.bezierCurveTo(
-          branchPath.cp1.x,
-          branchPath.cp1.y,
-          branchPath.cp2.x,
-          branchPath.cp2.y,
-          branchPath.end.x,
-          branchPath.end.y
-        );
-        ctx.stroke();
+        const segments = 14;
+
+        for (let index = 0; index < segments; index += 1) {
+          const t0 = index / segments;
+          const t1 = (index + 1) / segments;
+          const p0 = cubicPoint(branchPath.start, branchPath.cp1, branchPath.cp2, branchPath.end, t0);
+          const p1 = cubicPoint(branchPath.start, branchPath.cp1, branchPath.cp2, branchPath.end, t1);
+          const tMid = (t0 + t1) / 2;
+          ctx.lineWidth = lerp(branchPath.startWidth, branchPath.tipWidth, tMid);
+          ctx.beginPath();
+          ctx.moveTo(p0.x, p0.y);
+          ctx.lineTo(p1.x, p1.y);
+          ctx.stroke();
+        }
+
         ctx.shadowBlur = 0;
+      };
+
+      branchPaths.forEach((branchPath) => {
+        drawTaperedBranch(branchPath);
 
         ctx.fillStyle = palette.branch;
         ctx.beginPath();
-        ctx.arc(branchPath.end.x, branchPath.end.y, 4, 0, Math.PI * 2);
+        ctx.arc(branchPath.end.x, branchPath.end.y, clamp(branchPath.tipWidth * 1.05, 2, 4), 0, Math.PI * 2);
         ctx.fill();
 
         hitNodes.push({
