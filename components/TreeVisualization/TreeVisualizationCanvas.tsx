@@ -33,6 +33,8 @@ interface BranchPath {
   cp2: Point;
   end: Point;
   width: number;
+  leafCount: number;
+  growthScale: number;
   node: TreeNode;
 }
 
@@ -245,27 +247,58 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
       ctx.fillRect(0, groundY, w, h - groundY);
 
       const hitNodes: HitNode[] = [];
+      const leavesByProject = new Map<string, TreeNode[]>();
+      parsed.leaves.forEach((leaf) => {
+        const projectId = String((leaf.data as Record<string, unknown>)?.projectId || '');
+        if (!projectId) return;
+        if (!leavesByProject.has(projectId)) {
+          leavesByProject.set(projectId, []);
+        }
+        leavesByProject.get(projectId)?.push(leaf);
+      });
+      const totalProjects = Math.max(1, parsed.branches.length);
 
       const roots = parsed.roots.length > 0 ? parsed.roots : [{ id: 'default-root', type: 'root', data: { title: 'Purpose' } }];
+      const rootReachScale = clamp(0.74 + totalProjects * 0.085 + healthFactor * 0.3, 0.82, 2.05);
+      const rootDepthScale = clamp(0.78 + totalProjects * 0.075 + healthFactor * 0.34, 0.86, 2.08);
       roots.forEach((rootNode, index) => {
         const side = index % 2 === 0 ? -1 : 1;
-        const spread = 30 + index * 22;
-        const endX = trunkX + side * spread + swayAt(groundY + 26);
-        const endY = groundY + 30 + index * 12;
-        const cpOffset = 20 + index * 6;
+        const spread = (30 + index * 22) * rootReachScale;
+        const depth = (28 + index * 14) * rootDepthScale;
+        const endX = trunkX + side * spread + swayAt(groundY + 26) * 0.4;
+        const endY = groundY + depth;
+
+        const midX = trunkX + side * spread * 0.56;
+        const midY = groundY + depth * 0.54;
+        const nearWidth = clamp((10 + totalProjects * 1.05) * healthFactor * (1 - index * 0.09), 5.8, 18);
+        const tipWidth = clamp(nearWidth * 0.3, 1.8, 6.2);
 
         ctx.strokeStyle = palette.root;
         ctx.lineCap = 'round';
-        ctx.lineWidth = 4.5 - Math.min(index, 2) * 0.8;
         ctx.shadowColor = palette.glow;
-        ctx.shadowBlur = 9;
+        ctx.shadowBlur = 10;
+
+        ctx.lineWidth = nearWidth;
         ctx.beginPath();
         ctx.moveTo(trunkX, groundY + 1);
         ctx.bezierCurveTo(
-          trunkX + side * cpOffset,
-          groundY + 18,
-          endX - side * cpOffset * 0.55,
-          endY - 12,
+          trunkX + side * spread * 0.18,
+          groundY + depth * 0.22,
+          midX - side * spread * 0.12,
+          midY - depth * 0.08,
+          midX,
+          midY
+        );
+        ctx.stroke();
+
+        ctx.lineWidth = tipWidth;
+        ctx.beginPath();
+        ctx.moveTo(midX, midY);
+        ctx.bezierCurveTo(
+          midX + side * spread * 0.22,
+          midY + depth * 0.19,
+          endX - side * spread * 0.12,
+          endY - depth * 0.12,
           endX,
           endY
         );
@@ -274,7 +307,7 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
 
         ctx.fillStyle = palette.root;
         ctx.beginPath();
-        ctx.arc(endX, endY, 4.2, 0, Math.PI * 2);
+        ctx.arc(endX, endY, clamp(tipWidth * 0.72, 2.2, 4.4), 0, Math.PI * 2);
         ctx.fill();
 
         hitNodes.push({
@@ -367,15 +400,24 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
         const total = Math.max(1, branches.length);
         const ratio = total === 1 ? 0.5 : index / (total - 1);
         const side = index % 2 === 0 ? -1 : 1;
+        const branchLeaves = leavesByProject.get(branch.id) || [];
+        const leafCount = branchLeaves.length;
+        let lengthScale = clamp(0.32 + Math.log2(leafCount + 1) * 0.5, 0.32, 2.08);
+        let widthScale = clamp(0.28 + Math.log2(leafCount + 1) * 0.44, 0.28, 1.86);
+        if (leafCount <= 1) {
+          lengthScale *= 0.7;
+          widthScale *= 0.64;
+        }
+        const growthScale = clamp((lengthScale + widthScale) / 2, 0.22, 1.92);
 
         if (treeSpecies === 'fir') {
           const layer = index % Math.max(3, Math.ceil(total / 2));
           const layerRatio = layer / Math.max(1, Math.ceil(total / 2) - 1);
           const startY = h * (0.25 + ratio * 0.43);
-          const span = (w * (0.12 + (1 - layerRatio) * 0.2)) * (1 + (1 - healthFactor) * 0.2);
+          const span = (w * (0.12 + (1 - layerRatio) * 0.2)) * (1 + (1 - healthFactor) * 0.2) * lengthScale;
           const end = {
             x: trunkX + side * span + swayAt(startY) * 0.6,
-            y: startY + 16 + layer * 7,
+            y: startY + (16 + layer * 7) * clamp(0.82 + lengthScale * 0.28, 0.78, 1.42),
           };
 
           return {
@@ -385,18 +427,20 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
             cp1: { x: trunkX + side * span * 0.35, y: startY + 2 },
             cp2: { x: end.x - side * 14, y: end.y - 4 },
             end,
-            width: (10 - ratio * 4.8) * healthFactor,
+            width: clamp((10 - ratio * 4.8) * healthFactor * widthScale, 1.5, 14),
+            leafCount,
+            growthScale,
           };
         }
 
         if (treeSpecies === 'cherry') {
           const spread = w * (0.2 + ratio * 0.12);
           const startY = h * (0.34 + ratio * 0.28);
-          const reach = spread * (1.35 + (ratio - 0.5) * 0.2);
+          const reach = spread * (1.35 + (ratio - 0.5) * 0.2) * lengthScale;
           const upward = 24 + Math.abs(0.5 - ratio) * 34;
           const end = {
             x: trunkX + side * reach + swayAt(startY) * 1.25,
-            y: startY - upward + (index % 3) * 6,
+            y: startY - upward * clamp(0.82 + lengthScale * 0.22, 0.78, 1.3) + (index % 3) * 6,
           };
 
           return {
@@ -406,13 +450,15 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
             cp1: { x: trunkX + side * 26, y: startY - 12 },
             cp2: { x: end.x - side * (56 + ratio * 28), y: end.y + 16 },
             end,
-            width: (7.8 - ratio * 3.2) * healthFactor,
+            width: clamp((7.8 - ratio * 3.2) * healthFactor * widthScale, 1.4, 10.5),
+            leafCount,
+            growthScale,
           };
         }
 
         const angle = -Math.PI * 0.88 + ratio * Math.PI * 0.76;
-        const radiusX = w * 0.22;
-        const radiusY = h * 0.22;
+        const radiusX = w * 0.22 * lengthScale;
+        const radiusY = h * 0.22 * clamp(0.8 + lengthScale * 0.24, 0.74, 1.32);
         const startY = h * (0.43 + ratio * 0.22);
         const end = {
           x: trunkX + Math.cos(angle) * radiusX + swayAt(startY) * 1.15,
@@ -427,16 +473,18 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
           cp1: { x: trunkX + direction * 34, y: startY - 34 },
           cp2: { x: end.x - direction * 34, y: end.y + 12 },
           end,
-          width: (9.5 - ratio * 3.4) * healthFactor,
+          width: clamp((9.5 - ratio * 3.4) * healthFactor * widthScale, 1.4, 13),
+          leafCount,
+          growthScale,
         };
       });
 
       branchPaths.forEach((branchPath) => {
         ctx.strokeStyle = palette.branch;
         ctx.lineCap = 'round';
-        ctx.lineWidth = Math.max(2.8, branchPath.width);
+        ctx.lineWidth = Math.max(1.4, branchPath.width);
         ctx.shadowColor = palette.glow;
-        ctx.shadowBlur = 12;
+        ctx.shadowBlur = 8 + branchPath.growthScale * 4;
         ctx.beginPath();
         ctx.moveTo(branchPath.start.x, branchPath.start.y);
         ctx.bezierCurveTo(
@@ -472,9 +520,7 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
         const branch = branchMap.get(projectId);
         if (!branch) return;
 
-        const projectLeaves = parsed.leaves.filter(
-          (candidate) => String((candidate.data as Record<string, unknown>)?.projectId || '') === projectId
-        );
+        const projectLeaves = leavesByProject.get(projectId) || [];
         const localIndex = projectLeaves.findIndex((candidate) => candidate.id === leaf.id);
         const hash = stringHash(leaf.id);
 
@@ -491,7 +537,7 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
 
         const localCount = Math.max(projectLeaves.length, 1);
         const centerOffset = localIndex - (localCount - 1) / 2;
-        const along = 8 + (hash % 7) + (treeSpecies === 'fir' ? 2 : 0);
+        const along = 8 + (hash % 7) + (treeSpecies === 'fir' ? 2 : 0) + branch.growthScale * 1.8;
         const spread = centerOffset * (treeSpecies === 'fir' ? 6.2 : treeSpecies === 'cherry' ? 8.5 : 7.1);
 
         const baseX = branch.end.x + tangent.x * along + normal.x * spread;
@@ -505,36 +551,59 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
         const paletteByStage = stageColorsBySpecies[treeSpecies];
         const isHighNeglect = treeHealth < 42 && (stageStatus === LeafStatus.Healthy || stageStatus === LeafStatus.NeedsAttention);
         const colorSet = isHighNeglect ? paletteByStage[LeafStatus.Neglected] : paletteByStage[stageStatus] || paletteByStage[LeafStatus.Healthy];
+        const stageVisualScale: Record<LeafStatus, { size: number; glow: number }> = {
+          [LeafStatus.Healthy]: { size: 1.22, glow: 16.5 },
+          [LeafStatus.Completed]: { size: 1.28, glow: 18.5 },
+          [LeafStatus.InProgress]: { size: 1.08, glow: 13.5 },
+          [LeafStatus.NeedsAttention]: { size: 0.9, glow: 9.5 },
+          [LeafStatus.Neglected]: { size: 0.78, glow: 7.5 },
+        };
+        const leafData = leaf.data as Record<string, unknown>;
+        const createdMs = typeof leafData.createdAt === 'string' ? Date.parse(leafData.createdAt) : Number.NaN;
+        const lastActivityMs = typeof leafData.lastActivityAt === 'string' ? Date.parse(leafData.lastActivityAt) : Number.NaN;
+        const hasNoProgressYet =
+          stageStatus !== LeafStatus.Completed &&
+          Number.isFinite(createdMs) &&
+          Number.isFinite(lastActivityMs) &&
+          Math.abs(lastActivityMs - createdMs) < 1000;
+        const stageVisual = stageVisualScale[stageStatus] || stageVisualScale[LeafStatus.Healthy];
+        const ageScale = hasNoProgressYet ? 0.72 : 1;
+        const leafScale = stageVisual.size * ageScale;
+        const glowStrength = stageVisual.glow * (hasNoProgressYet ? 0.78 : 1);
 
         ctx.shadowColor = colorSet.glow;
-        ctx.shadowBlur = 12;
+        ctx.shadowBlur = glowStrength;
         ctx.fillStyle = colorSet.fill;
 
         if (treeSpecies === 'fir') {
           ctx.strokeStyle = colorSet.fill;
           ctx.lineCap = 'round';
-          ctx.lineWidth = 1.8;
+          ctx.lineWidth = clamp(1.2 * leafScale, 0.9, 2.6);
           const needleCount = 4;
+          const needleLength = 5 * leafScale;
           for (let n = 0; n < needleCount; n += 1) {
-            const nOffset = (n - (needleCount - 1) / 2) * 3.3;
+            const nOffset = (n - (needleCount - 1) / 2) * 3.3 * leafScale;
             const nx = lx + normal.x * nOffset;
             const ny = ly + normal.y * nOffset;
             ctx.beginPath();
             ctx.moveTo(nx, ny);
-            ctx.lineTo(nx + normal.x * 5 + tangent.x * 1.6, ny + normal.y * 5 + tangent.y * 1.6);
+            ctx.lineTo(
+              nx + normal.x * needleLength + tangent.x * (1.6 * leafScale),
+              ny + normal.y * needleLength + tangent.y * (1.6 * leafScale)
+            );
             ctx.stroke();
           }
         } else if (treeSpecies === 'cherry') {
           const angle = Math.atan2(tangent.y, tangent.x) + (hash % 11) * 0.03;
           ctx.beginPath();
-          ctx.ellipse(lx, ly, 6.8, 3.4, angle, 0, Math.PI * 2);
+          ctx.ellipse(lx, ly, 6.8 * leafScale, 3.4 * leafScale, angle, 0, Math.PI * 2);
           ctx.fill();
         } else {
-          const clusterRadius = 4 + (hash % 3);
+          const clusterRadius = (4 + (hash % 3)) * leafScale;
           for (let c = 0; c < 3; c += 1) {
             const clusterAngle = (Math.PI * 2 * c) / 3 + (hash % 10) * 0.1;
-            const cx = lx + Math.cos(clusterAngle) * 4.2;
-            const cy = ly + Math.sin(clusterAngle) * 3.6;
+            const cx = lx + Math.cos(clusterAngle) * 4.2 * leafScale;
+            const cy = ly + Math.sin(clusterAngle) * 3.6 * leafScale;
             ctx.beginPath();
             ctx.arc(cx, cy, clusterRadius, 0, Math.PI * 2);
             ctx.fill();
@@ -546,7 +615,7 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
           id: leaf.id,
           x: lx,
           y: ly,
-          r: 11,
+          r: clamp(8.5 * leafScale, 7, 15),
           node: leaf,
           label: String((leaf.data as Record<string, unknown>)?.title || 'Project Stage'),
         });
