@@ -728,7 +728,7 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
   return (
     <div
       ref={containerRef}
-      className="w-full h-full relative rounded-2xl overflow-hidden border border-yellow-700/35 shadow-[0_20px_50px_rgba(0,0,0,0.62),inset_0_0_120px_rgba(217,122,0,0.12)]"
+      className="w-full h-full min-h-[360px] sm:min-h-0 relative rounded-2xl overflow-hidden border border-yellow-700/35 shadow-[0_20px_50px_rgba(0,0,0,0.62),inset_0_0_120px_rgba(217,122,0,0.12)]"
     >
       <canvas
         ref={canvasRef}
@@ -744,6 +744,14 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
         onMouseLeave={() => setHoveredNode(null)}
         onClick={(event) => {
           const hitNode = getHitNode(event.clientX, event.clientY);
+          if (hitNode) {
+            onNodeClick(hitNode.node);
+          }
+        }}
+        onTouchStart={(event) => {
+          const touch = event.touches[0];
+          if (!touch) return;
+          const hitNode = getHitNode(touch.clientX, touch.clientY);
           if (hitNode) {
             onNodeClick(hitNode.node);
           }

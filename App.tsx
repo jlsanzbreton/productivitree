@@ -6,6 +6,7 @@ import PassionTest from './components/PassionTest/PassionTest';
 import OnboardingFlow from './components/Onboarding/OnboardingFlow';
 import TaskModal from './components/TaskModal/TaskModal';
 import EntityModal from './components/EntityModal/EntityModal';
+import GrowthEntityModal, { GrowthEntityType } from './components/Growth/GrowthEntityModal';
 import PrivacyModal from './components/Privacy/PrivacyModal';
 import { AppContext, AppContextType } from './contexts/AppContext';
 import { backgroundThemes, goldenPalette, visualTokens } from './constants';
@@ -38,6 +39,7 @@ const App: React.FC = () => {
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [selectedEntityNode, setSelectedEntityNode] = useState<TreeNode | null>(null);
   const [waterPulse, setWaterPulse] = useState(0);
+  const [growthEntityType, setGrowthEntityType] = useState<GrowthEntityType | null>(null);
 
   useEffect(() => {
     if (!isOnboardingComplete) {
@@ -77,7 +79,11 @@ const App: React.FC = () => {
       }}
     >
       <Header onOpenPrivacy={() => setShowPrivacyModal(true)} />
-      <main className="flex-grow flex flex-col items-center justify-center p-4 pb-28 sm:pb-32 overflow-hidden relative">
+      <main
+        className={`flex-grow flex flex-col p-3 sm:p-4 pb-36 sm:pb-32 overflow-hidden relative ${
+          currentPage === Page.Tree ? 'items-stretch justify-stretch' : 'items-center justify-center'
+        }`}
+      >
         <div className="absolute inset-0 pointer-events-none opacity-80">
           <div
             className="w-full h-full"
@@ -112,10 +118,17 @@ const App: React.FC = () => {
         )}
 
         {currentPage === Page.Tree && isOnboardingComplete && (
-          <TreeVisualizationCanvas treeData={treeData} onNodeClick={handleNodeClick} treeSpecies={treeSpecies} waterPulse={waterPulse} />
+          <div className="relative z-10 w-full h-full min-h-0">
+            <TreeVisualizationCanvas treeData={treeData} onNodeClick={handleNodeClick} treeSpecies={treeSpecies} waterPulse={waterPulse} />
+          </div>
         )}
 
         {showTaskModal && <TaskModal isOpen={showTaskModal} onClose={handleTaskModalClose} task={editingTask} />}
+        <GrowthEntityModal
+          isOpen={Boolean(growthEntityType)}
+          entityType={growthEntityType}
+          onClose={() => setGrowthEntityType(null)}
+        />
 
         {selectedEntityNode && (
           <EntityModal isOpen={Boolean(selectedEntityNode)} node={selectedEntityNode} onClose={() => setSelectedEntityNode(null)} />
@@ -129,7 +142,11 @@ const App: React.FC = () => {
             waterTree();
             setWaterPulse((prev) => prev + 1);
           }}
+          onAddRoot={() => setGrowthEntityType('root')}
+          onAddTrunk={() => setGrowthEntityType('trunk')}
+          onAddProject={() => setGrowthEntityType('branch')}
           onAddTask={() => {
+            setGrowthEntityType(null);
             setEditingTask(null);
             setShowTaskModal(true);
           }}
