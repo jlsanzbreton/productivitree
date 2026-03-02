@@ -104,6 +104,53 @@ export interface PassionTestResult {
   personalized_insights: string;
 }
 
+export type PassionAnalysisStatus = 'queued_manual' | 'running' | 'succeeded' | 'failed_offline' | 'failed_remote';
+
+export interface PassionDraft {
+  id: string;
+  userId: string;
+  answers: string[];
+  updatedAt: string;
+  consentSnapshot: boolean;
+  version: number;
+}
+
+export interface PassionAnalysisAttempt {
+  id: string;
+  draftId: string;
+  provider: 'gemini';
+  status: PassionAnalysisStatus;
+  errorCode?: string;
+  errorMessage?: string;
+  requestedAt: string;
+  finishedAt?: string;
+  payloadHash: string;
+}
+
+export interface PassionAnalysisResult {
+  id: string;
+  draftId: string;
+  provider: 'gemini';
+  result: PassionTestResult;
+  createdAt: string;
+}
+
+export interface PassionDraftStatus {
+  draftId: string | null;
+  hasDraft: boolean;
+  lastAttemptStatus: PassionAnalysisStatus | null;
+  lastError: string | null;
+  lastSavedAt: string | null;
+}
+
+export interface PassionAnalyzeResponse {
+  status: 'succeeded' | 'failed';
+  draftId: string;
+  result?: PassionTestResult;
+  error?: string;
+  attemptStatus?: PassionAnalysisStatus;
+}
+
 export interface OnboardingStep {
   id: string;
   title: string;

@@ -20,6 +20,7 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
     addTrunkSegment,
     addProjectBranch,
     addTask,
+    markPassionStepCompleted,
     activeBackground,
     setActiveBackground,
     activeTreeTheme,
@@ -27,6 +28,7 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
   } = useContext(AppContext) as AppContextType;
 
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [hasAutoOpenedPassion, setHasAutoOpenedPassion] = useState(false);
   const [roots, setRoots] = useState<RootInput[]>([{ title: '', description: '', strengthLevel: 8 }]);
   const [trunk, setTrunk] = useState<TrunkInput[]>([
     { title: '', description: '', proficiencyLevel: 7, yearsOfExperience: 2 },
@@ -39,13 +41,17 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
   const hasValidProjects = useMemo(() => projects.some((project) => project.title.trim()), [projects]);
 
   useEffect(() => {
-    if (currentStep.id === 'passion_test' && !showPassionTest && !passionTestResult) {
+    if (currentStep.id === 'passion_test' && !hasAutoOpenedPassion && !showPassionTest && !passionTestResult) {
       setShowPassionTest(true);
+      setHasAutoOpenedPassion(true);
     }
     if (currentStep.id !== 'passion_test' && showPassionTest) {
       setShowPassionTest(false);
     }
-  }, [currentStep.id, passionTestResult, setShowPassionTest, showPassionTest]);
+    if (currentStep.id !== 'passion_test') {
+      setHasAutoOpenedPassion(false);
+    }
+  }, [currentStep.id, hasAutoOpenedPassion, passionTestResult, setShowPassionTest, showPassionTest]);
 
   useEffect(() => {
     if (currentStep.id === 'define_roots' && passionTestResult?.root_suggestions?.length) {
@@ -89,6 +95,10 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
   };
 
   const goNext = () => {
+    if (currentStep.id === 'passion_test') {
+      markPassionStepCompleted();
+      setShowPassionTest(false);
+    }
     if (currentStepIndex < ONBOARDING_STEPS_CONFIG.length - 1) {
       persistCurrentStep();
       setCurrentStepIndex((prev) => prev + 1);
@@ -100,8 +110,6 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
   };
 
   const isContinueDisabled =
-    (currentStep.id === 'passion_test' && showPassionTest) ||
-    (currentStep.id === 'passion_test' && !passionTestResult) ||
     (currentStep.id === 'define_roots' && !hasValidRoots) ||
     (currentStep.id === 'trunk_setup' && !hasValidTrunk) ||
     (currentStep.id === 'first_projects' && !hasValidProjects);
@@ -122,6 +130,12 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
         {currentStep.id === 'passion_test' && showPassionTest && (
           <div className="h-[70vh]">
             <PassionTest onComplete={() => setShowPassionTest(false)} />
+          </div>
+        )}
+
+        {currentStep.id === 'passion_test' && (
+          <div className="p-3 rounded-md border border-sky-500/40 bg-sky-900/20 text-sm text-sky-100">
+            Paso opcional: puedes continuar sin análisis de IA. Tus respuestas quedan guardadas localmente para reintentar manualmente.
           </div>
         )}
 

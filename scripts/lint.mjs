@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 const ROOT = process.cwd();
-const INCLUDE_DIRS = ['components', 'contexts', 'utils', 'netlify/functions'];
+const INCLUDE_DIRS = ['components', 'contexts', 'utils', 'services', 'netlify/functions'];
 const INCLUDE_FILES = ['App.tsx', 'types.ts', 'constants.ts', 'index.tsx'];
 const FORBIDDEN_PATTERNS = [
   { regex: /console\.log\(/, label: 'console.log' },

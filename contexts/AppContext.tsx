@@ -6,6 +6,10 @@ import {
   DataConsentSettings,
   LeafStatus,
   PassionTestResult,
+  PassionAnalyzeResponse,
+  PassionAnalysisStatus,
+  PassionDraft,
+  PassionDraftStatus,
   PrivacySettings,
   ProjectBranch,
   ProjectStageLeaf,
@@ -34,6 +38,7 @@ import {
 } from '../utils/persistence';
 import { applyActivityBoost, applyHealthDecay, applyWaterBoost, deriveStageStatusFromNeglect } from '../utils/healthEngine';
 import { buildTreeData } from '../utils/treeBuilder';
+import { analyzeDraftNow, getAttemptHistory, getLatestResult, loadLatestDraft, saveDraft } from '../services/passionService';
 
 export interface AppContextType {
   currentUser: User;
@@ -67,7 +72,12 @@ export interface AppContextType {
   setShowPassionTest: React.Dispatch<React.SetStateAction<boolean>>;
   passionTestResult: PassionTestResult | null;
   setPassionTestResult: React.Dispatch<React.SetStateAction<PassionTestResult | null>>;
-  runPassionTest: (userInputs: string[]) => Promise<void>;
+  runPassionTest: (userInputs: string[]) => Promise<PassionAnalyzeResponse>;
+  passionDraftStatus: PassionDraftStatus;
+  savePassionDraft: (answers: string[]) => Promise<string>;
+  analyzePassionDraft: (draftId: string) => Promise<PassionAnalyzeResponse>;
+  loadLocalPassionDraft: () => Promise<PassionDraft | null>;
+  markPassionStepCompleted: () => void;
   isOnboardingComplete: boolean;
   setIsOnboardingComplete: React.Dispatch<React.SetStateAction<boolean>>;
   addTask: (task: Omit<ProjectStageLeaf, 'id' | 'userId' | 'createdAt' | 'lastActivityAt'>) => void;
@@ -99,6 +109,16 @@ export interface AppContextType {
 }
 
 const newId = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
+const toAttemptStatus = (value: unknown): PassionAnalysisStatus => {
+  const allowed: PassionAnalysisStatus[] = [
+    'queued_manual',
+    'running',
+    'succeeded',
+    'failed_offline',
+    'failed_remote',
+  ];
+  return allowed.includes(value as PassionAnalysisStatus) ? (value as PassionAnalysisStatus) : 'failed_remote';
+};
 
 const buildDefaults = (): AppPersistedState => {
   const user = defaultUser();
@@ -155,6 +175,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [editingTask, setEditingTask] = useState<ProjectStageLeaf | null>(null);
   const [consent, setConsent] = useState<DataConsentSettings>(initial.consent);
   const [privacySettings, setPrivacySettings] = useState<PrivacySettings>(initial.privacy);
+  const [passionDraftStatus, setPassionDraftStatus] = useState<PassionDraftStatus>({
+    draftId: null,
+    hasDraft: false,
+    lastAttemptStatus: null,
+    lastError: null,
+    lastSavedAt: null,
+  });
 
   const treeData = useMemo(
     () =>
@@ -417,54 +444,142 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, []);
 
-  const runPassionTest = useCallback(
-    async (userInputs: string[]) => {
-      if (!consent.aiReflectionConsent) {
-        setError('Please enable AI reflection consent before running the passion test.');
-        return;
-      }
+  const savePassionDraft = useCallback(
+    async (answers: string[]) => {
+      const normalizedAnswers = answers.map((answer) => (answer.trim() === '' ? 'Not answered' : answer.trim()));
+      const draftId = await saveDraft(currentUser.id || DEFAULT_USER_ID, normalizedAnswers, consent.aiReflectionConsent);
+      const draft = await loadLatestDraft(currentUser.id || DEFAULT_USER_ID);
+      setPassionDraftStatus((prev) => ({
+        ...prev,
+        draftId,
+        hasDraft: true,
+        lastSavedAt: draft?.updatedAt || new Date().toISOString(),
+      }));
+      return draftId;
+    },
+    [consent.aiReflectionConsent, currentUser.id]
+  );
 
-      setIsLoading(true);
-      setError(null);
-      try {
-        const response = await fetch('/.netlify/functions/passion-test', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            answers: userInputs,
-            userId: currentUser.id || DEFAULT_USER_ID,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`Passion test request failed with status ${response.status}`);
-        }
-
-        const result = (await response.json()) as PassionTestResult;
-        setPassionTestResult(result);
-        setCurrentUser((prev) => ({ ...prev, passionTestCompleted: true }));
-        if (result.root_suggestions?.length > 0 && roots.length === 0) {
-          const now = new Date().toISOString();
-          setRoots(
-            result.root_suggestions.map((suggestion) => ({
-              id: newId('root'),
-              userId: currentUser.id,
-              title: suggestion.title,
-              description: suggestion.description,
-              strengthLevel: suggestion.strength,
-              createdAt: now,
-            }))
-          );
-        }
-        recordMeaningfulActivity();
-      } catch (caughtError) {
-        const message = caughtError instanceof Error ? caughtError.message : 'Unknown error';
-        setError(message);
-      } finally {
-        setIsLoading(false);
+  const applyPassionResult = useCallback(
+    (result: PassionTestResult) => {
+      setPassionTestResult(result);
+      if (result.root_suggestions?.length > 0 && roots.length === 0) {
+        const now = new Date().toISOString();
+        setRoots(
+          result.root_suggestions.map((suggestion) => ({
+            id: newId('root'),
+            userId: currentUser.id,
+            title: suggestion.title,
+            description: suggestion.description,
+            strengthLevel: suggestion.strength,
+            createdAt: now,
+          }))
+        );
       }
     },
-    [consent.aiReflectionConsent, currentUser.id, recordMeaningfulActivity, roots.length]
+    [currentUser.id, roots.length]
+  );
+
+  const analyzePassionDraft = useCallback(
+    async (draftId: string): Promise<PassionAnalyzeResponse> => {
+      setIsLoading(true);
+      setError(null);
+      const analysis = await analyzeDraftNow(draftId);
+      const typedAttemptStatus = analysis.attemptStatus ? toAttemptStatus(analysis.attemptStatus) : undefined;
+
+      if (analysis.status === 'succeeded' && analysis.result) {
+        applyPassionResult(analysis.result);
+        const history = await getAttemptHistory(draftId);
+        setPassionDraftStatus((prev) => ({
+          ...prev,
+          draftId,
+          hasDraft: true,
+          lastAttemptStatus: history[0]?.status ? toAttemptStatus(history[0].status) : 'succeeded',
+          lastError: null,
+        }));
+        recordMeaningfulActivity();
+        setIsLoading(false);
+        return {
+          status: 'succeeded',
+          draftId,
+          result: analysis.result as PassionTestResult,
+          attemptStatus: typedAttemptStatus || 'succeeded',
+        };
+      }
+
+      const failureMessage =
+        typedAttemptStatus === 'failed_offline'
+          ? 'IA no disponible ahora. El borrador quedó guardado en local para reintentar manualmente.'
+          : analysis.error || 'No se pudo analizar el borrador ahora.';
+
+      setError(failureMessage);
+      setPassionDraftStatus((prev) => ({
+        ...prev,
+        draftId,
+        hasDraft: true,
+        lastAttemptStatus: typedAttemptStatus || 'failed_remote',
+        lastError: failureMessage,
+      }));
+      setIsLoading(false);
+      return {
+        status: 'failed',
+        draftId,
+        error: failureMessage,
+        attemptStatus: typedAttemptStatus || 'failed_remote',
+      };
+    },
+    [applyPassionResult, recordMeaningfulActivity]
+  );
+
+  const loadLocalPassionDraft = useCallback(async (): Promise<PassionDraft | null> => {
+    const draft = await loadLatestDraft(currentUser.id || DEFAULT_USER_ID);
+    if (!draft) return null;
+
+    const history = await getAttemptHistory(draft.id);
+    const latestResult = await getLatestResult(draft.id);
+    if (latestResult) {
+      setPassionTestResult(latestResult);
+    }
+    setPassionDraftStatus({
+      draftId: draft.id,
+      hasDraft: true,
+      lastAttemptStatus: (history[0]?.status as PassionAnalysisStatus | undefined) || null,
+      lastError: history[0]?.errorMessage || null,
+      lastSavedAt: draft.updatedAt,
+    });
+    return draft;
+  }, [currentUser.id]);
+
+  const markPassionStepCompleted = useCallback(() => {
+    setCurrentUser((prev) => ({ ...prev, passionTestCompleted: true }));
+  }, []);
+
+  useEffect(() => {
+    loadLocalPassionDraft().catch((_error) => {
+      // Offline-first load should never block app startup.
+    });
+  }, [loadLocalPassionDraft]);
+
+  const runPassionTest = useCallback(
+    async (userInputs: string[]): Promise<PassionAnalyzeResponse> => {
+      if (!consent.aiReflectionConsent) {
+        const draftId = await savePassionDraft(userInputs);
+        const message = 'Borrador guardado localmente. Activa consentimiento para analizar con IA cuando quieras.';
+        setPassionDraftStatus((prev) => ({
+          ...prev,
+          draftId,
+          hasDraft: true,
+          lastError: message,
+          lastAttemptStatus: 'queued_manual',
+        }));
+        setError(message);
+        return { status: 'failed', draftId, error: message, attemptStatus: 'queued_manual' };
+      }
+
+      const draftId = await savePassionDraft(userInputs);
+      return analyzePassionDraft(draftId);
+    },
+    [analyzePassionDraft, consent.aiReflectionConsent, savePassionDraft]
   );
 
   const exportAllData = useCallback(
@@ -574,6 +689,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         passionTestResult,
         setPassionTestResult,
         runPassionTest,
+        passionDraftStatus,
+        savePassionDraft,
+        analyzePassionDraft,
+        loadLocalPassionDraft,
+        markPassionStepCompleted,
         isOnboardingComplete,
         setIsOnboardingComplete,
         addTask,

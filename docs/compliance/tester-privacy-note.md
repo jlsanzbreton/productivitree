@@ -9,7 +9,9 @@ Effective date: 2026-03-02
 - Onboarding completion state.
 - Optional passion-test result.
 
-Storage location: browser localStorage (local device).
+Storage location:
+- General app state: browser `localStorage`.
+- Passion test drafts/attempt history/results: browser IndexedDB (Dexie), local device.
 
 ## AI usage disclosure
 - Passion-test answers are sent only if the user explicitly enables AI reflection consent.
