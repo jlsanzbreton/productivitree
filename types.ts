@@ -9,6 +9,8 @@ export interface User {
   createdAt: string;
 }
 
+export type TreeSpecies = 'oak' | 'fir' | 'cherry';
+
 export interface CorePurposeRoot {
   id: string;
   userId: string;
@@ -199,6 +201,7 @@ export interface AppPersistedState {
   achievements: AchievementData[];
   activeBackground: string;
   activeTreeTheme: string;
+  treeSpecies: TreeSpecies;
   treeHealth: TreeHealthState;
   isOnboardingComplete: boolean;
   passionTestResult: PassionTestResult | null;

@@ -31,6 +31,7 @@ export const buildDefaultPersistedState = (defaults) => ({
   achievements: defaults.achievements,
   activeBackground: defaults.activeBackground,
   activeTreeTheme: defaults.activeTreeTheme,
+  treeSpecies: defaults.treeSpecies || 'oak',
   treeHealth: defaults.treeHealth,
   isOnboardingComplete: defaults.isOnboardingComplete,
   passionTestResult: defaults.passionTestResult,

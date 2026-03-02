@@ -23,8 +23,10 @@ const App: React.FC = () => {
     setShowPassionTest,
     isOnboardingComplete,
     activeBackground,
+    treeSpecies,
     currentTasks,
     treeData,
+    waterTree,
     showTaskModal,
     setShowTaskModal,
     editingTask,
@@ -35,6 +37,7 @@ const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(() => (isOnboardingComplete ? Page.Tree : Page.Onboarding));
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [selectedEntityNode, setSelectedEntityNode] = useState<TreeNode | null>(null);
+  const [waterPulse, setWaterPulse] = useState(0);
 
   useEffect(() => {
     if (!isOnboardingComplete) {
@@ -65,21 +68,33 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen antialiased" style={{ background: currentThemeDetails.backgroundGradient }}>
+    <div
+      className="flex flex-col h-screen antialiased text-slate-100"
+      style={{ background: currentThemeDetails.backgroundGradient, fontFamily: '"Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif' }}
+    >
       <Header onOpenPrivacy={() => setShowPrivacyModal(true)} />
-      <main className="flex-grow flex flex-col items-center justify-center p-4 overflow-hidden relative">
-        <div className="absolute inset-0 pointer-events-none opacity-60">
+      <main className="flex-grow flex flex-col items-center justify-center p-4 pb-28 sm:pb-32 overflow-hidden relative">
+        <div className="absolute inset-0 pointer-events-none opacity-80">
           <div
             className="w-full h-full"
             style={{
               background:
-                'radial-gradient(circle at 12% 16%, rgba(139, 220, 166, 0.18), transparent 30%), radial-gradient(circle at 82% 20%, rgba(99, 179, 237, 0.12), transparent 36%)',
+                'radial-gradient(circle at 8% 14%, rgba(56, 229, 169, 0.2), transparent 32%), radial-gradient(circle at 78% 8%, rgba(75, 163, 255, 0.16), transparent 36%), radial-gradient(circle at 54% 88%, rgba(162, 72, 255, 0.1), transparent 38%)',
+            }}
+          />
+        </div>
+        <div className="absolute inset-0 pointer-events-none opacity-30">
+          <div
+            className="w-full h-full"
+            style={{
+              background:
+                'linear-gradient(110deg, rgba(15, 23, 42, 0.92) 0%, rgba(2, 6, 23, 0.78) 40%, rgba(8, 47, 73, 0.58) 100%)',
             }}
           />
         </div>
         {error && (
           <div
-            className="absolute top-2 right-2 z-30 text-xs rounded-md px-3 py-2 border"
+            className="absolute top-2 right-2 z-30 text-xs rounded-md px-3 py-2 border shadow-[0_0_20px_rgba(249,115,22,0.25)]"
             style={{ background: visualTokens.panelSurface, borderColor: '#f97316', color: visualTokens.panelText }}
           >
             {error}
@@ -93,7 +108,7 @@ const App: React.FC = () => {
         )}
 
         {currentPage === Page.Tree && isOnboardingComplete && (
-          <TreeVisualizationCanvas treeData={treeData} onNodeClick={handleNodeClick} />
+          <TreeVisualizationCanvas treeData={treeData} onNodeClick={handleNodeClick} treeSpecies={treeSpecies} waterPulse={waterPulse} />
         )}
 
         {showTaskModal && <TaskModal isOpen={showTaskModal} onClose={handleTaskModalClose} task={editingTask} />}
@@ -106,6 +121,10 @@ const App: React.FC = () => {
       </main>
       {isOnboardingComplete && (
         <Footer
+          onWater={() => {
+            waterTree();
+            setWaterPulse((prev) => prev + 1);
+          }}
           onAddTask={() => {
             setEditingTask(null);
             setShowTaskModal(true);

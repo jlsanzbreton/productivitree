@@ -18,6 +18,7 @@ import {
   TaskData,
   TreeHealthState,
   TreeNode,
+  TreeSpecies,
   User,
 } from '../types';
 import {
@@ -27,6 +28,7 @@ import {
   defaultHealthState,
   defaultUser,
   healthPolicy,
+  treeSpeciesOptions,
   treeThemes,
 } from '../constants';
 import {
@@ -59,6 +61,8 @@ export interface AppContextType {
   setActiveBackground: React.Dispatch<React.SetStateAction<string>>;
   activeTreeTheme: string;
   setActiveTreeTheme: React.Dispatch<React.SetStateAction<string>>;
+  treeSpecies: TreeSpecies;
+  setTreeSpecies: React.Dispatch<React.SetStateAction<TreeSpecies>>;
   treeHealth: number;
   treeHealthState: TreeHealthState;
   waterTree: () => void;
@@ -132,6 +136,7 @@ const buildDefaults = (): AppPersistedState => {
     achievements: [],
     activeBackground: user.backgroundSetting,
     activeTreeTheme: user.treeTheme,
+    treeSpecies: 'oak',
     treeHealth: defaultHealthState(),
     isOnboardingComplete: false,
     passionTestResult: null,
@@ -165,6 +170,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [achievements, setAchievements] = useState<AchievementData[]>(initial.achievements);
   const [activeBackground, setActiveBackground] = useState(initial.activeBackground);
   const [activeTreeTheme, setActiveTreeTheme] = useState(initial.activeTreeTheme);
+  const [treeSpecies, setTreeSpecies] = useState<TreeSpecies>(initial.treeSpecies || 'oak');
   const [treeHealthState, setTreeHealthState] = useState<TreeHealthState>(initial.treeHealth);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -207,7 +213,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!treeThemes[activeTreeTheme]) {
       setActiveTreeTheme(Object.keys(treeThemes)[0]);
     }
-  }, [activeBackground, activeTreeTheme]);
+    if (!treeSpeciesOptions.some((species) => species.key === treeSpecies)) {
+      setTreeSpecies('oak');
+    }
+  }, [activeBackground, activeTreeTheme, treeSpecies]);
 
   const persistState = useCallback(() => {
     const payload: AppPersistedState = {
@@ -220,6 +229,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       achievements,
       activeBackground,
       activeTreeTheme,
+      treeSpecies,
       treeHealth: treeHealthState,
       isOnboardingComplete,
       passionTestResult,
@@ -236,6 +246,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     achievements,
     activeBackground,
     activeTreeTheme,
+    treeSpecies,
     treeHealthState,
     isOnboardingComplete,
     passionTestResult,
@@ -594,6 +605,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         achievements,
         activeBackground,
         activeTreeTheme,
+        treeSpecies,
         treeHealth: treeHealthState,
         isOnboardingComplete,
         passionTestResult,
@@ -609,6 +621,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       achievements,
       activeBackground,
       activeTreeTheme,
+      treeSpecies,
       treeHealthState,
       isOnboardingComplete,
       passionTestResult,
@@ -625,6 +638,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentTasks(nextDefaults.stages);
     setAchievements(nextDefaults.achievements);
     setTreeHealthState(nextDefaults.treeHealth);
+    setTreeSpecies(nextDefaults.treeSpecies);
     setPassionTestResult(nextDefaults.passionTestResult);
     setIsOnboardingComplete(false);
     setConsent(nextDefaults.consent);
@@ -644,6 +658,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTreeHealthState(nextDefaults.treeHealth);
     setActiveBackground(nextDefaults.activeBackground);
     setActiveTreeTheme(nextDefaults.activeTreeTheme);
+    setTreeSpecies(nextDefaults.treeSpecies);
     setPassionTestResult(nextDefaults.passionTestResult);
     setIsOnboardingComplete(nextDefaults.isOnboardingComplete);
     setConsent(nextDefaults.consent);
@@ -675,6 +690,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setActiveBackground,
         activeTreeTheme,
         setActiveTreeTheme,
+        treeSpecies,
+        setTreeSpecies,
         treeHealth: treeHealthState.value,
         treeHealthState,
         waterTree,

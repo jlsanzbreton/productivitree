@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { AppContext, AppContextType } from '../../contexts/AppContext';
-import { ONBOARDING_STEPS_CONFIG, backgroundThemes, treeThemes } from '../../constants';
+import { ONBOARDING_STEPS_CONFIG, backgroundThemes, treeSpeciesOptions, treeThemes } from '../../constants';
 import PassionTest from '../PassionTest/PassionTest';
 import { Button } from '../UI/Button';
 import { CheckCircleIcon, ChevronRightIcon } from '../Icons/HeroIcons';
@@ -25,6 +25,8 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
     setActiveBackground,
     activeTreeTheme,
     setActiveTreeTheme,
+    treeSpecies,
+    setTreeSpecies,
   } = useContext(AppContext) as AppContextType;
 
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
@@ -297,6 +299,23 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
                     } bg-gray-800`}
                   >
                     {theme.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <h4 className="font-semibold mb-2 text-emerald-300">Tree Species</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {treeSpeciesOptions.map((species) => (
+                  <button
+                    key={species.key}
+                    onClick={() => setTreeSpecies(species.key)}
+                    className={`p-3 rounded-lg border text-left ${
+                      treeSpecies === species.key ? 'border-cyan-400 shadow-[0_0_24px_rgba(56,189,248,0.25)]' : 'border-gray-700'
+                    } bg-gray-800`}
+                  >
+                    <div className="font-semibold text-cyan-100">{species.name}</div>
+                    <div className="text-xs text-gray-300 mt-1">{species.description}</div>
                   </button>
                 ))}
               </div>

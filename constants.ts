@@ -3,6 +3,7 @@ import {
   HealthPolicyConfig,
   LeafStatus,
   OnboardingStep,
+  TreeSpecies,
   TreeHealthState,
   TreeTheme,
   User,
@@ -88,6 +89,24 @@ export const treeThemes: Record<string, TreeTheme> = {
     leafNeglected: '#d8bf71',
   },
 };
+
+export const treeSpeciesOptions: Array<{ key: TreeSpecies; name: string; description: string }> = [
+  {
+    key: 'oak',
+    name: 'Oak',
+    description: 'Robust canopy with dense clustered leaves.',
+  },
+  {
+    key: 'fir',
+    name: 'Fir',
+    description: 'Straight trunk, layered branches, neon needles.',
+  },
+  {
+    key: 'cherry',
+    name: 'Cherry',
+    description: 'Angular wide branches with vivid blossom leaves.',
+  },
+];
 
 export const backgroundThemes: Record<string, BackgroundTheme> = {
   forest_glow: {

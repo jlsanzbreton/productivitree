@@ -1,11 +1,13 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppContext, AppContextType } from '../../contexts/AppContext';
-import { leafColors, treeThemes } from '../../constants';
-import { LeafStatus, TreeNode } from '../../types';
+import { treeThemes } from '../../constants';
+import { LeafStatus, TreeNode, TreeSpecies } from '../../types';
 
 interface TreeVisualizationCanvasProps {
   treeData: TreeNode;
   onNodeClick: (node: TreeNode) => void;
+  treeSpecies: TreeSpecies;
+  waterPulse?: number;
   width?: number;
   height?: number;
 }
@@ -19,8 +21,45 @@ interface HitNode {
   label: string;
 }
 
+interface Point {
+  x: number;
+  y: number;
+}
+
+interface BranchPath {
+  id: string;
+  start: Point;
+  cp1: Point;
+  cp2: Point;
+  end: Point;
+  width: number;
+  node: TreeNode;
+}
+
+interface WaterParticle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  age: number;
+  duration: number;
+  size: number;
+  glow: number;
+  targetX: number;
+  targetY: number;
+}
+
+interface SceneState {
+  trunkX: number;
+  groundY: number;
+  branchTips: Point[];
+  canopyTop: number;
+}
+
 const stringHash = (value: string) =>
   value.split('').reduce((acc, char) => (acc * 31 + char.charCodeAt(0)) % 100000, 7);
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 const parseTree = (treeData: TreeNode) => {
   const roots: TreeNode[] = [];
@@ -37,25 +76,111 @@ const parseTree = (treeData: TreeNode) => {
   };
 
   walk(treeData);
+  return { roots, trunks, branches, leaves };
+};
+
+const stageColorsBySpecies: Record<TreeSpecies, Record<LeafStatus, { fill: string; glow: string }>> = {
+  oak: {
+    [LeafStatus.Healthy]: { fill: '#49ff98', glow: 'rgba(73,255,152,0.62)' },
+    [LeafStatus.NeedsAttention]: { fill: '#f8d65b', glow: 'rgba(248,214,91,0.58)' },
+    [LeafStatus.Neglected]: { fill: '#d8bf6f', glow: 'rgba(216,191,111,0.45)' },
+    [LeafStatus.InProgress]: { fill: '#58e2ff', glow: 'rgba(88,226,255,0.58)' },
+    [LeafStatus.Completed]: { fill: '#9ca9c4', glow: 'rgba(156,169,196,0.4)' },
+  },
+  fir: {
+    [LeafStatus.Healthy]: { fill: '#36ffd2', glow: 'rgba(54,255,210,0.62)' },
+    [LeafStatus.NeedsAttention]: { fill: '#6fffb6', glow: 'rgba(111,255,182,0.52)' },
+    [LeafStatus.Neglected]: { fill: '#95c8a8', glow: 'rgba(149,200,168,0.4)' },
+    [LeafStatus.InProgress]: { fill: '#2ad8ff', glow: 'rgba(42,216,255,0.55)' },
+    [LeafStatus.Completed]: { fill: '#84a5ac', glow: 'rgba(132,165,172,0.36)' },
+  },
+  cherry: {
+    [LeafStatus.Healthy]: { fill: '#ff7fdd', glow: 'rgba(255,127,221,0.62)' },
+    [LeafStatus.NeedsAttention]: { fill: '#ff9ce8', glow: 'rgba(255,156,232,0.56)' },
+    [LeafStatus.Neglected]: { fill: '#d6a1c8', glow: 'rgba(214,161,200,0.42)' },
+    [LeafStatus.InProgress]: { fill: '#bf82ff', glow: 'rgba(191,130,255,0.58)' },
+    [LeafStatus.Completed]: { fill: '#b19bc5', glow: 'rgba(177,155,197,0.36)' },
+  },
+};
+
+const speciesPalette = (species: TreeSpecies, trunkColor: string, branchColor: string, rootColor: string) => {
+  if (species === 'fir') {
+    return {
+      trunk: '#3f4f57',
+      branch: '#4f676f',
+      root: '#3e3f5c',
+      glow: 'rgba(45,255,214,0.28)',
+      canopy: 'rgba(39, 255, 220, 0.1)',
+    };
+  }
+  if (species === 'cherry') {
+    return {
+      trunk: '#3c3442',
+      branch: '#4f4059',
+      root: '#45324b',
+      glow: 'rgba(255,120,216,0.28)',
+      canopy: 'rgba(242, 121, 255, 0.1)',
+    };
+  }
   return {
-    roots,
-    trunks,
-    branches,
-    leaves,
+    trunk: trunkColor,
+    branch: branchColor,
+    root: rootColor,
+    glow: 'rgba(88, 255, 188, 0.26)',
+    canopy: 'rgba(90, 255, 180, 0.09)',
   };
 };
 
-const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({ treeData, onNodeClick, width, height }) => {
+const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
+  treeData,
+  onNodeClick,
+  treeSpecies,
+  waterPulse = 0,
+  width,
+  height,
+}) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const hitNodesRef = useRef<HitNode[]>([]);
   const rafRef = useRef<number | null>(null);
+  const lastFrameRef = useRef<number>(0);
+  const particlesRef = useRef<WaterParticle[]>([]);
+  const sceneRef = useRef<SceneState>({ trunkX: 0, groundY: 0, branchTips: [], canopyTop: 0 });
   const { activeTreeTheme, treeHealth } = useContext(AppContext) as AppContextType;
   const [hoveredNode, setHoveredNode] = useState<HitNode | null>(null);
   const [tooltip, setTooltip] = useState({ x: 0, y: 0 });
 
   const theme = useMemo(() => treeThemes[activeTreeTheme] || treeThemes.spring, [activeTreeTheme]);
   const parsed = useMemo(() => parseTree(treeData), [treeData]);
+
+  useEffect(() => {
+    if (waterPulse <= 0) return;
+
+    const { trunkX, groundY, branchTips, canopyTop } = sceneRef.current;
+    if (!Number.isFinite(trunkX) || !Number.isFinite(groundY) || groundY <= 0) return;
+
+    const targets = branchTips.length > 0 ? branchTips : [{ x: trunkX, y: canopyTop || groundY * 0.5 }];
+    const particles: WaterParticle[] = [];
+
+    for (let index = 0; index < 84; index += 1) {
+      const target = targets[index % targets.length];
+      const spread = (Math.random() - 0.5) * 38;
+      particles.push({
+        x: trunkX + (Math.random() - 0.5) * 34,
+        y: groundY - 4 + Math.random() * 10,
+        vx: spread * 0.014,
+        vy: -0.24 - Math.random() * 0.1,
+        age: 0,
+        duration: 2100 + Math.random() * 900,
+        size: 1.8 + Math.random() * 2.2,
+        glow: 8 + Math.random() * 12,
+        targetX: target.x + (Math.random() - 0.5) * 26,
+        targetY: target.y + (Math.random() - 0.5) * 22,
+      });
+    }
+
+    particlesRef.current = particles;
+  }, [waterPulse]);
 
   useEffect(() => {
     if (!canvasRef.current || !containerRef.current) return;
@@ -68,6 +193,10 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({ treeD
       const w = width || containerRef.current?.offsetWidth || 600;
       const h = height || containerRef.current?.offsetHeight || 520;
       const dpr = window.devicePixelRatio || 1;
+      const groundY = h * 0.8;
+      const canopyTop = h * 0.16;
+      const trunkX = w / 2;
+
       canvas.width = Math.floor(w * dpr);
       canvas.height = Math.floor(h * dpr);
       canvas.style.width = `${w}px`;
@@ -75,20 +204,43 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({ treeD
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
 
-      const sway = Math.sin(time / 1400) * (0.8 + (100 - treeHealth) / 90);
-      const healthFactor = Math.max(0.25, Math.min(1, treeHealth / 100));
-      const trunkX = w / 2;
-      const groundY = h * 0.79;
+      const dt = lastFrameRef.current > 0 ? time - lastFrameRef.current : 16;
+      lastFrameRef.current = time;
 
-      const background = ctx.createLinearGradient(0, 0, 0, h);
-      background.addColorStop(0, 'rgba(255,255,255,0.03)');
-      background.addColorStop(1, 'rgba(0,0,0,0.22)');
-      ctx.fillStyle = background;
+      const healthFactor = clamp(treeHealth / 100, 0.2, 1);
+      const breezeForce = 1.8 + (1 - healthFactor) * 4.2;
+      const windCore = Math.sin(time / 1100) * breezeForce;
+      const windSecondary = Math.sin(time / 860 + 0.7) * (breezeForce * 0.5);
+      const swayAt = (y: number) => {
+        const heightRatio = clamp((groundY - y) / (groundY - canopyTop), 0, 1);
+        return (windCore + windSecondary * 0.45) * heightRatio;
+      };
+
+      const palette = speciesPalette(treeSpecies, theme.trunkColor, theme.branchColor, theme.rootColor);
+
+      const skyGradient = ctx.createLinearGradient(0, 0, 0, h);
+      skyGradient.addColorStop(0, '#04070f');
+      skyGradient.addColorStop(0.44, '#091224');
+      skyGradient.addColorStop(1, '#05070d');
+      ctx.fillStyle = skyGradient;
+      ctx.fillRect(0, 0, w, h);
+
+      const atmosphericGlow = ctx.createRadialGradient(w * 0.24, h * 0.2, 24, w * 0.45, h * 0.36, w * 0.7);
+      atmosphericGlow.addColorStop(0, 'rgba(56, 189, 248, 0.2)');
+      atmosphericGlow.addColorStop(0.4, 'rgba(16, 185, 129, 0.11)');
+      atmosphericGlow.addColorStop(1, 'rgba(4, 8, 16, 0)');
+      ctx.fillStyle = atmosphericGlow;
+      ctx.fillRect(0, 0, w, h);
+
+      const canopyAura = ctx.createRadialGradient(trunkX, h * 0.32, 20, trunkX, h * 0.34, w * 0.5);
+      canopyAura.addColorStop(0, palette.canopy);
+      canopyAura.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = canopyAura;
       ctx.fillRect(0, 0, w, h);
 
       const soil = ctx.createLinearGradient(0, groundY, 0, h);
-      soil.addColorStop(0, 'rgba(62,39,24,0.45)');
-      soil.addColorStop(1, 'rgba(21,16,10,0.75)');
+      soil.addColorStop(0, 'rgba(39, 27, 26, 0.55)');
+      soil.addColorStop(1, 'rgba(11, 8, 8, 0.9)');
       ctx.fillStyle = soil;
       ctx.fillRect(0, groundY, w, h - groundY);
 
@@ -96,138 +248,343 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({ treeD
 
       const roots = parsed.roots.length > 0 ? parsed.roots : [{ id: 'default-root', type: 'root', data: { title: 'Purpose' } }];
       roots.forEach((rootNode, index) => {
-        const direction = index % 2 === 0 ? -1 : 1;
-        const spread = (index + 1) * 26;
-        const endX = trunkX + direction * spread;
-        const endY = groundY + 38 + index * 16;
+        const side = index % 2 === 0 ? -1 : 1;
+        const spread = 30 + index * 22;
+        const endX = trunkX + side * spread + swayAt(groundY + 26);
+        const endY = groundY + 30 + index * 12;
+        const cpOffset = 20 + index * 6;
 
-        ctx.strokeStyle = theme.rootColor;
-        ctx.lineWidth = 4;
+        ctx.strokeStyle = palette.root;
+        ctx.lineCap = 'round';
+        ctx.lineWidth = 4.5 - Math.min(index, 2) * 0.8;
+        ctx.shadowColor = palette.glow;
+        ctx.shadowBlur = 9;
         ctx.beginPath();
-        ctx.moveTo(trunkX, groundY);
+        ctx.moveTo(trunkX, groundY + 1);
         ctx.bezierCurveTo(
-          trunkX + direction * 16,
-          groundY + 20,
-          endX - direction * 8,
-          endY - 10,
+          trunkX + side * cpOffset,
+          groundY + 18,
+          endX - side * cpOffset * 0.55,
+          endY - 12,
           endX,
           endY
         );
         ctx.stroke();
+        ctx.shadowBlur = 0;
 
-        ctx.fillStyle = theme.rootColor;
+        ctx.fillStyle = palette.root;
         ctx.beginPath();
-        ctx.arc(endX, endY, 5, 0, Math.PI * 2);
+        ctx.arc(endX, endY, 4.2, 0, Math.PI * 2);
         ctx.fill();
 
         hitNodes.push({
           id: rootNode.id,
           x: endX,
           y: endY,
-          r: 11,
+          r: 10,
           node: rootNode as TreeNode,
           label: String((rootNode.data as Record<string, unknown>)?.title || 'Core Root'),
         });
       });
 
-      ctx.strokeStyle = theme.trunkColor;
-      ctx.lineCap = 'round';
-      ctx.lineWidth = 24 * healthFactor;
-      ctx.beginPath();
-      ctx.moveTo(trunkX, groundY);
-      ctx.bezierCurveTo(trunkX - 10, h * 0.6, trunkX + 8, h * 0.38, trunkX, h * 0.2);
-      ctx.stroke();
+      const trunkTopY = treeSpecies === 'fir' ? h * 0.12 : h * 0.18;
+      const trunkMidY = h * 0.48;
+      const trunkTopX = trunkX + swayAt(trunkTopY) * (treeSpecies === 'fir' ? 0.4 : 1);
+      const trunkMidX = trunkX + swayAt(trunkMidY) * 0.7;
+
+      const drawTrunkSegment = (
+        fromX: number,
+        fromY: number,
+        cpX: number,
+        cpY: number,
+        toX: number,
+        toY: number,
+        widthValue: number
+      ) => {
+        ctx.strokeStyle = palette.trunk;
+        ctx.lineCap = 'round';
+        ctx.lineWidth = widthValue;
+        ctx.shadowColor = palette.glow;
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        ctx.moveTo(fromX, fromY);
+        ctx.bezierCurveTo(cpX, cpY, cpX, cpY, toX, toY);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      };
+
+      if (treeSpecies === 'oak') {
+        drawTrunkSegment(trunkX, groundY, trunkX - 14 + swayAt(h * 0.67), h * 0.63, trunkMidX, trunkMidY, 34 * healthFactor);
+        drawTrunkSegment(
+          trunkMidX,
+          trunkMidY,
+          trunkMidX + 7 + swayAt(h * 0.3),
+          h * 0.28,
+          trunkTopX,
+          trunkTopY,
+          18 * healthFactor
+        );
+      } else if (treeSpecies === 'fir') {
+        drawTrunkSegment(trunkX, groundY, trunkX + swayAt(h * 0.45) * 0.25, h * 0.5, trunkMidX, trunkMidY, 22 * healthFactor);
+        drawTrunkSegment(trunkMidX, trunkMidY, trunkTopX, h * 0.26, trunkTopX, trunkTopY, 12 * healthFactor);
+      } else {
+        drawTrunkSegment(trunkX, groundY, trunkX - 12 + swayAt(h * 0.58), h * 0.62, trunkMidX, trunkMidY, 26 * healthFactor);
+        drawTrunkSegment(
+          trunkMidX,
+          trunkMidY,
+          trunkMidX + 6 + swayAt(h * 0.27) * 0.8,
+          h * 0.26,
+          trunkTopX,
+          trunkTopY,
+          11 * healthFactor
+        );
+      }
 
       const trunkNodes = parsed.trunks.filter((node) => node.id !== 'trunk-hub');
       trunkNodes.forEach((node, index) => {
-        const y = groundY - (index + 1) * ((groundY - h * 0.2) / Math.max(trunkNodes.length + 1, 2));
-        ctx.fillStyle = theme.trunkColor;
+        const y = groundY - (index + 1) * ((groundY - trunkTopY) / Math.max(trunkNodes.length + 1, 2));
+        const x = trunkX + swayAt(y) * 0.45;
+        ctx.fillStyle = palette.trunk;
+        ctx.shadowColor = palette.glow;
+        ctx.shadowBlur = 10;
         ctx.beginPath();
-        ctx.arc(trunkX, y, 8, 0, Math.PI * 2);
+        ctx.arc(x, y, 6.8, 0, Math.PI * 2);
         ctx.fill();
+        ctx.shadowBlur = 0;
+
         hitNodes.push({
           id: node.id,
-          x: trunkX,
+          x,
           y,
-          r: 12,
+          r: 11,
           node,
           label: String((node.data as Record<string, unknown>)?.title || 'Skill Segment'),
         });
       });
 
       const branches = parsed.branches;
-      branches.forEach((branch, index) => {
+      const branchPaths: BranchPath[] = branches.map((branch, index) => {
+        const total = Math.max(1, branches.length);
+        const ratio = total === 1 ? 0.5 : index / (total - 1);
         const side = index % 2 === 0 ? -1 : 1;
-        const depth = Math.floor(index / 2);
-        const startY = h * (0.55 - depth * 0.06);
-        const branchLength = Math.max(80, w * (0.17 + (index % 3) * 0.04));
-        const endX = trunkX + side * (branchLength + sway * 8);
-        const endY = startY - 24 - depth * 8;
-        const cpOffset = 24 + depth * 8;
 
-        ctx.strokeStyle = theme.branchColor;
-        ctx.lineWidth = 7 * healthFactor;
+        if (treeSpecies === 'fir') {
+          const layer = index % Math.max(3, Math.ceil(total / 2));
+          const layerRatio = layer / Math.max(1, Math.ceil(total / 2) - 1);
+          const startY = h * (0.25 + ratio * 0.43);
+          const span = (w * (0.12 + (1 - layerRatio) * 0.2)) * (1 + (1 - healthFactor) * 0.2);
+          const end = {
+            x: trunkX + side * span + swayAt(startY) * 0.6,
+            y: startY + 16 + layer * 7,
+          };
+
+          return {
+            id: branch.id,
+            node: branch,
+            start: { x: trunkX + swayAt(startY) * 0.18, y: startY },
+            cp1: { x: trunkX + side * span * 0.35, y: startY + 2 },
+            cp2: { x: end.x - side * 14, y: end.y - 4 },
+            end,
+            width: (10 - ratio * 4.8) * healthFactor,
+          };
+        }
+
+        if (treeSpecies === 'cherry') {
+          const spread = w * (0.2 + ratio * 0.12);
+          const startY = h * (0.34 + ratio * 0.28);
+          const reach = spread * (1.35 + (ratio - 0.5) * 0.2);
+          const upward = 24 + Math.abs(0.5 - ratio) * 34;
+          const end = {
+            x: trunkX + side * reach + swayAt(startY) * 1.25,
+            y: startY - upward + (index % 3) * 6,
+          };
+
+          return {
+            id: branch.id,
+            node: branch,
+            start: { x: trunkX + swayAt(startY) * 0.42, y: startY },
+            cp1: { x: trunkX + side * 26, y: startY - 12 },
+            cp2: { x: end.x - side * (56 + ratio * 28), y: end.y + 16 },
+            end,
+            width: (7.8 - ratio * 3.2) * healthFactor,
+          };
+        }
+
+        const angle = -Math.PI * 0.88 + ratio * Math.PI * 0.76;
+        const radiusX = w * 0.22;
+        const radiusY = h * 0.22;
+        const startY = h * (0.43 + ratio * 0.22);
+        const end = {
+          x: trunkX + Math.cos(angle) * radiusX + swayAt(startY) * 1.15,
+          y: h * 0.33 + Math.sin(angle) * radiusY,
+        };
+        const direction = end.x >= trunkX ? 1 : -1;
+
+        return {
+          id: branch.id,
+          node: branch,
+          start: { x: trunkX + swayAt(startY) * 0.32, y: startY },
+          cp1: { x: trunkX + direction * 34, y: startY - 34 },
+          cp2: { x: end.x - direction * 34, y: end.y + 12 },
+          end,
+          width: (9.5 - ratio * 3.4) * healthFactor,
+        };
+      });
+
+      branchPaths.forEach((branchPath) => {
+        ctx.strokeStyle = palette.branch;
+        ctx.lineCap = 'round';
+        ctx.lineWidth = Math.max(2.8, branchPath.width);
+        ctx.shadowColor = palette.glow;
+        ctx.shadowBlur = 12;
         ctx.beginPath();
-        ctx.moveTo(trunkX, startY);
+        ctx.moveTo(branchPath.start.x, branchPath.start.y);
         ctx.bezierCurveTo(
-          trunkX + side * cpOffset,
-          startY - 20,
-          endX - side * cpOffset,
-          endY + 10,
-          endX,
-          endY
+          branchPath.cp1.x,
+          branchPath.cp1.y,
+          branchPath.cp2.x,
+          branchPath.cp2.y,
+          branchPath.end.x,
+          branchPath.end.y
         );
         ctx.stroke();
+        ctx.shadowBlur = 0;
 
-        ctx.fillStyle = theme.branchColor;
+        ctx.fillStyle = palette.branch;
         ctx.beginPath();
-        ctx.arc(endX, endY, 6, 0, Math.PI * 2);
+        ctx.arc(branchPath.end.x, branchPath.end.y, 4, 0, Math.PI * 2);
         ctx.fill();
 
         hitNodes.push({
-          id: branch.id,
-          x: endX,
-          y: endY,
-          r: 13,
-          node: branch,
-          label: String((branch.data as Record<string, unknown>)?.title || 'Project Branch'),
-        });
-
-        const projectLeaves = parsed.leaves.filter(
-          (leaf) => String((leaf.data as Record<string, unknown>)?.projectId || '') === branch.id
-        );
-        projectLeaves.forEach((leaf, leafIndex) => {
-          const hash = stringHash(leaf.id);
-          const orbit = 18 + (hash % 26);
-          const angle = ((leafIndex + 1) * Math.PI) / Math.max(projectLeaves.length + 1, 2);
-          const lx = endX + Math.cos(angle + (hash % 5) * 0.2) * orbit + side * 8;
-          const ly = endY - Math.sin(angle) * orbit - 5;
-          const stageStatus = (leaf.data as Record<string, unknown>)?.status as LeafStatus;
-          const statusColor = leafColors[stageStatus] || leafColors[LeafStatus.Healthy];
-
-          let fillColor = statusColor.fill;
-          if (treeHealth < 45 && (stageStatus === LeafStatus.Healthy || stageStatus === LeafStatus.NeedsAttention)) {
-            fillColor = leafColors[LeafStatus.Neglected].fill;
-          }
-
-          ctx.fillStyle = fillColor;
-          ctx.shadowColor = statusColor.glow;
-          ctx.shadowBlur = 10;
-          ctx.beginPath();
-          ctx.ellipse(lx, ly, 8, 5.5, (hash % 20) * 0.05 + sway * 0.02, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.shadowBlur = 0;
-
-          hitNodes.push({
-            id: leaf.id,
-            x: lx,
-            y: ly,
-            r: 11,
-            node: leaf,
-            label: String((leaf.data as Record<string, unknown>)?.title || 'Stage'),
-          });
+          id: branchPath.id,
+          x: branchPath.end.x,
+          y: branchPath.end.y,
+          r: 12,
+          node: branchPath.node,
+          label: String((branchPath.node.data as Record<string, unknown>)?.title || 'Project Branch'),
         });
       });
+
+      const branchMap = new Map(branchPaths.map((path) => [path.id, path]));
+
+      parsed.leaves.forEach((leaf, leafIndex) => {
+        const projectId = String((leaf.data as Record<string, unknown>)?.projectId || '');
+        const branch = branchMap.get(projectId);
+        if (!branch) return;
+
+        const projectLeaves = parsed.leaves.filter(
+          (candidate) => String((candidate.data as Record<string, unknown>)?.projectId || '') === projectId
+        );
+        const localIndex = projectLeaves.findIndex((candidate) => candidate.id === leaf.id);
+        const hash = stringHash(leaf.id);
+
+        const tangentRaw = {
+          x: branch.end.x - branch.cp2.x,
+          y: branch.end.y - branch.cp2.y,
+        };
+        const tangentLen = Math.max(0.001, Math.hypot(tangentRaw.x, tangentRaw.y));
+        const tangent = {
+          x: tangentRaw.x / tangentLen,
+          y: tangentRaw.y / tangentLen,
+        };
+        const normal = { x: -tangent.y, y: tangent.x };
+
+        const localCount = Math.max(projectLeaves.length, 1);
+        const centerOffset = localIndex - (localCount - 1) / 2;
+        const along = 8 + (hash % 7) + (treeSpecies === 'fir' ? 2 : 0);
+        const spread = centerOffset * (treeSpecies === 'fir' ? 6.2 : treeSpecies === 'cherry' ? 8.5 : 7.1);
+
+        const baseX = branch.end.x + tangent.x * along + normal.x * spread;
+        const baseY = branch.end.y + tangent.y * along + normal.y * spread;
+        const leafSway = swayAt(baseY) * (0.58 + (hash % 5) * 0.1);
+
+        const lx = baseX + leafSway;
+        const ly = baseY + Math.sin(time / 720 + leafIndex * 0.42) * 1.2;
+
+        const stageStatus = ((leaf.data as Record<string, unknown>)?.status as LeafStatus) || LeafStatus.Healthy;
+        const paletteByStage = stageColorsBySpecies[treeSpecies];
+        const isHighNeglect = treeHealth < 42 && (stageStatus === LeafStatus.Healthy || stageStatus === LeafStatus.NeedsAttention);
+        const colorSet = isHighNeglect ? paletteByStage[LeafStatus.Neglected] : paletteByStage[stageStatus] || paletteByStage[LeafStatus.Healthy];
+
+        ctx.shadowColor = colorSet.glow;
+        ctx.shadowBlur = 12;
+        ctx.fillStyle = colorSet.fill;
+
+        if (treeSpecies === 'fir') {
+          ctx.strokeStyle = colorSet.fill;
+          ctx.lineCap = 'round';
+          ctx.lineWidth = 1.8;
+          const needleCount = 4;
+          for (let n = 0; n < needleCount; n += 1) {
+            const nOffset = (n - (needleCount - 1) / 2) * 3.3;
+            const nx = lx + normal.x * nOffset;
+            const ny = ly + normal.y * nOffset;
+            ctx.beginPath();
+            ctx.moveTo(nx, ny);
+            ctx.lineTo(nx + normal.x * 5 + tangent.x * 1.6, ny + normal.y * 5 + tangent.y * 1.6);
+            ctx.stroke();
+          }
+        } else if (treeSpecies === 'cherry') {
+          const angle = Math.atan2(tangent.y, tangent.x) + (hash % 11) * 0.03;
+          ctx.beginPath();
+          ctx.ellipse(lx, ly, 6.8, 3.4, angle, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          const clusterRadius = 4 + (hash % 3);
+          for (let c = 0; c < 3; c += 1) {
+            const clusterAngle = (Math.PI * 2 * c) / 3 + (hash % 10) * 0.1;
+            const cx = lx + Math.cos(clusterAngle) * 4.2;
+            const cy = ly + Math.sin(clusterAngle) * 3.6;
+            ctx.beginPath();
+            ctx.arc(cx, cy, clusterRadius, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        ctx.shadowBlur = 0;
+
+        hitNodes.push({
+          id: leaf.id,
+          x: lx,
+          y: ly,
+          r: 11,
+          node: leaf,
+          label: String((leaf.data as Record<string, unknown>)?.title || 'Project Stage'),
+        });
+      });
+
+      const particles: WaterParticle[] = [];
+      particlesRef.current.forEach((particle) => {
+        const next = { ...particle };
+        next.age += dt;
+        if (next.age >= next.duration) return;
+
+        const pull = 0.000045 * dt;
+        next.vx += (next.targetX - next.x) * pull;
+        next.vy += (next.targetY - next.y) * pull;
+        next.vy += 0.00009 * dt;
+        next.x += next.vx * dt;
+        next.y += next.vy * dt;
+
+        const progress = next.age / next.duration;
+        const alpha = 1 - progress;
+        ctx.fillStyle = `rgba(103, 232, 249, ${alpha.toFixed(3)})`;
+        ctx.shadowColor = `rgba(110, 255, 247, ${(alpha * 0.9).toFixed(3)})`;
+        ctx.shadowBlur = next.glow;
+        ctx.beginPath();
+        ctx.arc(next.x, next.y, next.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        particles.push(next);
+      });
+      particlesRef.current = particles;
+
+      sceneRef.current = {
+        trunkX,
+        groundY,
+        branchTips: branchPaths.map((path) => ({ x: path.end.x, y: path.end.y })),
+        canopyTop,
+      };
 
       hitNodesRef.current = hitNodes;
       rafRef.current = requestAnimationFrame(render);
@@ -236,8 +593,9 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({ treeD
     rafRef.current = requestAnimationFrame(render);
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      lastFrameRef.current = 0;
     };
-  }, [parsed, theme, treeHealth, width, height]);
+  }, [parsed, theme, treeHealth, treeSpecies, width, height]);
 
   const getHitNode = (clientX: number, clientY: number) => {
     if (!canvasRef.current) return null;
@@ -248,16 +606,19 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({ treeD
   };
 
   return (
-    <div ref={containerRef} className="w-full h-full relative rounded-xl overflow-hidden">
+    <div
+      ref={containerRef}
+      className="w-full h-full relative rounded-2xl overflow-hidden border border-cyan-200/10 shadow-[0_20px_50px_rgba(2,6,23,0.6),inset_0_0_120px_rgba(16,185,129,0.08)]"
+    >
       <canvas
         ref={canvasRef}
-        className="w-full h-full rounded-xl"
+        className="w-full h-full rounded-2xl"
         onMouseMove={(event) => {
           const hitNode = getHitNode(event.clientX, event.clientY);
           setHoveredNode(hitNode);
           if (hitNode && canvasRef.current) {
             const rect = canvasRef.current.getBoundingClientRect();
-            setTooltip({ x: event.clientX - rect.left + 10, y: event.clientY - rect.top + 10 });
+            setTooltip({ x: event.clientX - rect.left + 12, y: event.clientY - rect.top + 12 });
           }
         }}
         onMouseLeave={() => setHoveredNode(null)}
@@ -270,7 +631,7 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({ treeD
       />
       {hoveredNode && (
         <div
-          className="absolute pointer-events-none text-xs px-2 py-1 rounded-md bg-black/75 text-emerald-100 border border-emerald-500/30"
+          className="absolute pointer-events-none text-xs px-2 py-1 rounded-md border border-cyan-200/30 bg-slate-950/75 text-cyan-100 shadow-[0_0_18px_rgba(56,189,248,0.38)]"
           style={{ left: tooltip.x, top: tooltip.y }}
         >
           {hoveredNode.label}
