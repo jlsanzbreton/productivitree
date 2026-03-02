@@ -12,13 +12,14 @@ interface TaskModalProps {
 }
 
 const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, task }) => {
-  const { addTask, updateTask, deleteTask } = useContext(AppContext) as AppContextType;
+  const { addTask, updateTask, deleteTask, projects } = useContext(AppContext) as AppContextType;
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<number>(3); // Default priority 1-5
-  const [status, setStatus] = useState<LeafStatus>(LeafStatus.Pending);
+  const [status, setStatus] = useState<LeafStatus>(LeafStatus.Healthy);
   const [dueDate, setDueDate] = useState<string>('');
+  const [projectId, setProjectId] = useState<string>('');
 
   useEffect(() => {
     if (task) {
@@ -27,20 +28,26 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, task }) => {
       setPriority(task.priority);
       setStatus(task.status);
       setDueDate(task.dueDate ? task.dueDate.split('T')[0] : ''); // Format for date input
+      setProjectId(task.projectId);
     } else {
       // Reset for new task
       setTitle('');
       setDescription('');
       setPriority(3);
-      setStatus(LeafStatus.Pending);
+      setStatus(LeafStatus.Healthy);
       setDueDate('');
+      setProjectId(projects[0]?.id || '');
     }
-  }, [task, isOpen]);
+  }, [task, isOpen, projects]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
       alert("Title is required."); // Simple validation
+      return;
+    }
+    if (!projectId) {
+      alert('Select a project branch before adding a stage.');
       return;
     }
 
@@ -49,8 +56,8 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, task }) => {
       description,
       priority,
       status,
+      projectId,
       dueDate: dueDate ? new Date(dueDate).toISOString() : undefined,
-      // projectId will be handled if projects are implemented
     };
 
     if (task) { // Editing existing task
@@ -101,6 +108,24 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, task }) => {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div>
+            <label htmlFor="project" className="block text-sm font-medium text-gray-300 mb-1">
+              Project Branch
+            </label>
+            <select
+              id="project"
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              className="w-full p-2.5 bg-gray-700 border border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-white"
+            >
+              {projects.length === 0 && <option value="">Create a project first</option>}
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.title}
+                </option>
+              ))}
+            </select>
+          </div>
           <div>
             <label htmlFor="priority" className="block text-sm font-medium text-gray-300 mb-1">
               Priority (1-Low, 5-High)

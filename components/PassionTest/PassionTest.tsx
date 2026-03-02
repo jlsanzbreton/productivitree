@@ -26,7 +26,8 @@ const PassionTest: React.FC<{ onComplete?: () => void }> = ({ onComplete }) => {
     setPassionTestResult, 
     currentUser, 
     setCurrentUser,
-    setRoots, // To update roots based on suggestions
+    consent,
+    setAiReflectionConsent,
     setShowPassionTest
   } = useContext(AppContext) as AppContextType;
 
@@ -155,6 +156,15 @@ const PassionTest: React.FC<{ onComplete?: () => void }> = ({ onComplete }) => {
     <div className="p-4 sm:p-6 bg-gray-800 rounded-lg shadow-xl text-white h-full max-h-[90vh] sm:max-h-[80vh] w-full max-w-2xl flex flex-col overflow-hidden">
       <h2 className="text-2xl sm:text-3xl font-bold mb-2 text-center text-blue-300">Discover Your Passions</h2>
       <p className="text-sm text-gray-400 mb-6 text-center">Answer these questions to help us understand what drives you. Your answers will shape the roots of your Productivitree.</p>
+      <label className="flex items-start gap-2 text-xs text-gray-300 bg-gray-700/70 p-3 rounded-md">
+        <input
+          type="checkbox"
+          checked={consent.aiReflectionConsent}
+          onChange={(event) => setAiReflectionConsent(event.target.checked)}
+          className="mt-0.5"
+        />
+        <span>I consent to sending these answers to server-side AI processing for passion insights.</span>
+      </label>
       
       <div className="flex-grow overflow-y-auto pr-2 space-y-4">
         <div className="mb-1 p-3 bg-gray-700 rounded-md">
@@ -184,7 +194,7 @@ const PassionTest: React.FC<{ onComplete?: () => void }> = ({ onComplete }) => {
             Next
           </Button>
         ) : (
-          <Button onClick={handleSubmit} disabled={isLoading} variant="primary" className="w-full sm:w-auto">
+          <Button onClick={handleSubmit} disabled={isLoading || !consent.aiReflectionConsent} variant="primary" className="w-full sm:w-auto">
             {isLoading ? 'Submitting...' : 'Submit & See Insights'}
           </Button>
         )}

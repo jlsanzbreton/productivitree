@@ -1,56 +1,66 @@
+import type { ComponentType } from 'react';
 
 export interface User {
   id: string;
-  email?: string; // Optional as per Supabase schema if auth is separate
+  email?: string;
   passionTestCompleted: boolean;
-  treeTheme: string; // e.g., 'spring', 'summer'
-  backgroundSetting: string; // e.g., 'enchanted_forest'
-  treeHealth: number; // 0-100
-  createdAt?: string; // User's proposal added this
+  treeTheme: string;
+  backgroundSetting: string;
+  createdAt: string;
 }
 
-export interface RootData {
+export interface CorePurposeRoot {
   id: string;
   userId: string;
   title: string;
   description: string;
-  strengthLevel: number; // 1-10
-  createdAt: string; // ISO date string
+  strengthLevel: number;
+  createdAt: string;
 }
 
-export interface ProjectData {
+export interface SkillTrunkSegment {
   id: string;
   userId: string;
   title: string;
   description: string;
-  priorityLevel: number; // 1-5
-  trunkThickness?: number; // Calculated or set
-  // branchPosition removed as per user's ProjectData suggestion (implicitly by omission)
-  status: 'active' | 'completed' | 'paused';
-  createdAt: string; // ISO date string
-  completedAt?: string; // ISO date string
+  proficiencyLevel: number;
+  yearsOfExperience: number;
+  createdAt: string;
+}
+
+export type ProjectBranchStatus = 'active' | 'completed' | 'paused';
+
+export interface ProjectBranch {
+  id: string;
+  userId: string;
+  title: string;
+  description: string;
+  priorityLevel: number;
+  status: ProjectBranchStatus;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export enum LeafStatus {
-  Pending = 'pending',
+  Healthy = 'healthy',
+  NeedsAttention = 'needs_attention',
+  Neglected = 'neglected',
   InProgress = 'in_progress',
-  Urgent = 'urgent',
   Completed = 'completed',
-  RecentActivity = 'recent_activity' // Custom status for animation
 }
 
-export interface TaskData {
+export interface ProjectStageLeaf {
   id: string;
-  projectId?: string; // Optional if a task can exist without a project initially
+  userId: string;
+  projectId: string;
   title: string;
   description: string;
   status: LeafStatus;
-  priority: number; // 1-5
-  dueDate?: string; // ISO date string
-  // leafPosition removed as per user's TaskData suggestion (implicitly by omission)
-  lastActivityAt: string; // ISO date string. User's INITIAL_TREE_DATA example used 'lastActivity', ensure consistency.
-  createdAt: string; // ISO date string
-  completedAt?: string; // ISO date string
+  priority: number;
+  dueDate?: string;
+  createdAt: string;
+  lastActivityAt: string;
+  completedAt?: string;
 }
 
 export interface AchievementData {
@@ -58,86 +68,99 @@ export interface AchievementData {
   projectId?: string;
   title: string;
   type: 'personal_growth' | 'milestone' | 'opportunity';
-  fruitType: 'green_apple' | 'red_apple' | 'orange'; // Corresponds to type color
-  // position removed as per user's AchievementData suggestion (implicitly by omission)
-  createdAt: string; // ISO date string
+  createdAt: string;
 }
 
-// For D3 Visualization, adapted from user's proposal and existing structure
+export interface TreeHealthState {
+  value: number;
+  lastDecayAt: string;
+  lastWateredAt: string | null;
+  lastMeaningfulActivityAt: string;
+}
+
+export interface DataConsentSettings {
+  aiReflectionConsent: boolean;
+  acceptedAt: string | null;
+}
+
+export interface PrivacySettings {
+  localOnlyMode: boolean;
+  analyticsEnabled: boolean;
+}
+
 export interface TreeNode {
   id: string;
   parentId?: string | null;
-  type: 'rootNode' | 'trunk' | 'branch' | 'leaf' | 'fruit'; // Keep existing, user proposal similar
-  position?: { x: number; y: number; z?: number }; // Added from user proposal
-  size?: number; // Added from user proposal (was on TreeNode before, ensuring it's optional)
-  color?: string; // Added from user proposal (was on TreeNode before, ensuring it's optional)
-  data?: { // More specific data based on type, accommodating new INITIAL_TREE_DATA and existing TaskData
-    name?: string; // For root, branches
-    // For leaves, aligning with TaskData but also INITIAL_TREE_DATA's specific leaf data structure
-    id?: string;
-    title?: string;
-    description?: string;
-    status?: LeafStatus;
-    priority?: number;
-    projectId?: string;
-    createdAt?: string | Date; // INITIAL_TREE_DATA used Date objects
-    lastActivityAt?: string | Date; // INITIAL_TREE_DATA used Date objects
-  } | TaskData | ProjectData | RootData | AchievementData | any; // Keep flexible 'any' for now if needed
+  type: 'rootNode' | 'root' | 'trunk' | 'branch' | 'leaf' | 'fruit';
+  size?: number;
+  color?: string;
+  data?: Record<string, unknown> | CorePurposeRoot | SkillTrunkSegment | ProjectBranch | ProjectStageLeaf | AchievementData;
   children?: TreeNode[];
-  // D3 specific properties, will be augmented by d3.hierarchy
-  x?: number; 
-  y?: number;
-  depth?: number; 
-  x0?: number;
-  y0?: number;
 }
 
-// For TreeNode in the prompt (more generic, combining with D3 needs) - This was old, removing if not strictly necessary.
-// export interface ProductivitreeNode {
-//   id: string;
-//   type: 'root' | 'trunk' | 'branch' | 'leaf' | 'fruit';
-//   position: { x: number; y: number; z?: number };
-//   size: number;
-//   color: string;
-//   animation?: AnimationState;
-//   metadata?: any;
-// }
-
-// export interface AnimationState {
-//   type: 'sway' | 'growth' | 'fall' | 'breathe' | 'particles';
-//   active: boolean;
-//   duration?: number;
-// }
-
 export interface PassionTestResult {
-  passion_categories: string[]; // User proposal uses snake_case
+  passion_categories: string[];
   root_suggestions: Array<{ title: string; description: string; strength: number }>;
   personalized_insights: string;
 }
 
-export interface OnboardingStep { // This was in my types.ts, keeping for OnboardingFlow
+export interface OnboardingStep {
   id: string;
   title: string;
   description: string;
-  isCompleted: boolean; // This was not in my original OnboardingStep, but useful
 }
 
-// Moved from constants.tsx previously, ensuring they are here.
 export interface TreeTheme {
   name: string;
-  leafColors: {
-    base: string;
-    variant: string;
-  };
   branchColor: string;
-  skyColor: string;
+  trunkColor: string;
+  rootColor: string;
+  leafHealthy: string;
+  leafWarning: string;
+  leafNeglected: string;
 }
 
 export interface BackgroundTheme {
-  name:string;
+  name: string;
   backgroundGradient: string;
-  particles?: React.FC | null; // Allow null as per user's constants.ts change
-  ambientSound?: string;
-  weatherEffects?: string;
-  textColor: string; // Added as per my existing constants.ts
+  particles?: ComponentType | null;
+  textColor: string;
 }
+
+export interface VisualTokens {
+  panelSurface: string;
+  panelBorder: string;
+  panelText: string;
+  accent: string;
+}
+
+export interface HealthPolicyConfig {
+  decayIntervalMinutes: number;
+  decayStep: number;
+  neglectThresholdHours: number;
+  activityBoostStep: number;
+  waterBoostStep: number;
+}
+
+export interface AppPersistedState {
+  schemaVersion: number;
+  user: User;
+  roots: CorePurposeRoot[];
+  trunkSegments: SkillTrunkSegment[];
+  projects: ProjectBranch[];
+  stages: ProjectStageLeaf[];
+  achievements: AchievementData[];
+  activeBackground: string;
+  activeTreeTheme: string;
+  treeHealth: TreeHealthState;
+  isOnboardingComplete: boolean;
+  passionTestResult: PassionTestResult | null;
+  consent: DataConsentSettings;
+  privacy: PrivacySettings;
+}
+
+// Backward compatible aliases for existing components.
+export type RootData = CorePurposeRoot;
+export type ExperienceArea = SkillTrunkSegment;
+export type ProjectData = ProjectBranch;
+export type TaskData = ProjectStageLeaf;

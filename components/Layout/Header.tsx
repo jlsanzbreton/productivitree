@@ -1,9 +1,9 @@
 
 import React, { useContext } from 'react';
 import { AppContext, AppContextType } from '../../contexts/AppContext';
-import { CogIcon, UserCircleIcon, QuestionMarkCircleIcon } from '../Icons/HeroIcons'; // Assuming you have these
+import { CogIcon, QuestionMarkCircleIcon } from '../Icons/HeroIcons';
 
-const Header: React.FC = () => {
+const Header: React.FC<{ onOpenPrivacy: () => void }> = ({ onOpenPrivacy }) => {
   const { currentUser, treeHealth, setShowPassionTest, isOnboardingComplete } = useContext(AppContext) as AppContextType;
 
   return (
@@ -30,16 +30,10 @@ const Header: React.FC = () => {
             <QuestionMarkCircleIcon className="h-6 w-6 sm:h-7 sm:w-7 text-blue-400" />
           </button>
         )}
-        {/* Placeholder for Settings and User Profile */}
         {isOnboardingComplete && (
-          <>
-            <button className="p-2 rounded-full hover:bg-gray-700 transition-colors" title="Settings">
-              <CogIcon className="h-6 w-6 sm:h-7 sm:w-7 text-gray-400" />
-            </button>
-            <button className="p-2 rounded-full hover:bg-gray-700 transition-colors" title="User Profile">
-              <UserCircleIcon className="h-6 w-6 sm:h-7 sm:w-7 text-gray-400" />
-            </button>
-          </>
+          <button className="p-2 rounded-full hover:bg-gray-700 transition-colors" title="Privacy and Settings" onClick={onOpenPrivacy}>
+            <CogIcon className="h-6 w-6 sm:h-7 sm:w-7 text-gray-300" />
+          </button>
         )}
       </div>
     </header>

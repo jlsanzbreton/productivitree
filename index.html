@@ -1,88 +1,19 @@
-
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Productivitree</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://d3js.org/d3.v7.min.js"></script>
-  <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#10b981">
-  <style>
-    /* For Tailwind JIT to work properly and for any essential global styles/animations if unavoidable */
-    body {
-      font-family: 'Inter', sans-serif; /* A nice default font */
-    }
-    @keyframes gentleSway {
-      0%, 100% { transform: rotate(-2deg); }
-      50% { transform: rotate(2deg); }
-    }
-    .animate-gentleSway {
-      animation: gentleSway 3s ease-in-out infinite;
-    }
-    @keyframes urgentPulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.7; transform: scale(1.05); }
-    }
-    .animate-urgentPulse {
-      animation: urgentPulse 1s ease-in-out infinite;
-    }
-    @keyframes subtleDrift {
-      0%, 100% { transform: translateX(0px) translateY(0px); opacity: 0.7; }
-      25% { transform: translateX(8px) translateY(-4px); opacity: 1; }
-      50% { transform: translateX(-8px) translateY(6px); opacity: 0.6; }
-      75% { transform: translateX(5px) translateY(-2px); opacity: 0.9; }
-    }
-     /* Custom scrollbar for better aesthetics */
-    ::-webkit-scrollbar {
-      width: 8px;
-      height: 8px;
-    }
-    ::-webkit-scrollbar-track {
-      background: #2d3748; /* dark-700 */
-    }
-    ::-webkit-scrollbar-thumb {
-      background: #4a5568; /* dark-600 */
-      border-radius: 4px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-      background: #718096; /* dark-500 */
-    }
-  </style>
-<script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@^18.2.0",
-    "react-dom/client": "https://esm.sh/react-dom@^18.2.0/client",
-    "react-dom": "https://esm.sh/react-dom@^18.2.0",
-    "react/": "https://esm.sh/react@^18.2.0/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.2.0",
-    "d3": "https://esm.sh/d3@^7.9.0",
-    "react-dom/": "https://esm.sh/react-dom@^18.2.0/"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
-</head>
-<body class="bg-gray-900 text-white">
-  <div id="root"></div>
-  <script>
-    console.log('HTML: Just before loading index.tsx');
-  </script>
-  <script type="module" src="/index.tsx"></script>
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/service-worker.js')
-          .then(registration => {
-            console.log('ServiceWorker registration successful with scope: ', registration.scope);
-          })
-          .catch(error => {
-            console.log('ServiceWorker registration failed: ', error);
-          });
-      });
-    }
-  </script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self';"
+    />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta name="theme-color" content="#0f141c" />
+    <title>Productivitree</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-slate-950 text-slate-100">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
 </html>

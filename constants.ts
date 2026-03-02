@@ -1,175 +1,156 @@
+import {
+  BackgroundTheme,
+  HealthPolicyConfig,
+  LeafStatus,
+  OnboardingStep,
+  TreeHealthState,
+  TreeTheme,
+  User,
+  VisualTokens,
+} from './types';
 
-import React from 'react';
-import { LeafStatus, TreeNode } from './types';
+export const APP_SCHEMA_VERSION = 2;
+export const DEFAULT_USER_ID = 'default-user';
+export const GEMINI_TEXT_MODEL = 'gemini-2.5-flash';
 
-// --- Leaf Style Constants ---
-export const leafColors: Record<LeafStatus, { gradient: string; shadow: string; animation?: string }> = {
-  [LeafStatus.Pending]: {
-    gradient: 'bg-gradient-to-br from-teal-500 to-teal-700', // #10b981, #059669
-    shadow: 'shadow-[0_2px_4px_rgba(16,185,129,0.3)]',
-  },
-  [LeafStatus.InProgress]: {
-    gradient: 'bg-gradient-to-br from-amber-500 to-amber-600', // #f59e0b, #d97706
-    shadow: 'shadow-md',
-    animation: 'animate-pulse', // Tailwind pulse
-  },
-  [LeafStatus.Urgent]: {
-    gradient: 'bg-gradient-to-br from-red-500 to-red-700', // #ef4444, #dc2626
-    shadow: 'shadow-lg shadow-red-500/50',
-    animation: 'animate-urgentPulse', // Custom pulse in index.html
-  },
-  [LeafStatus.Completed]: {
-    gradient: 'bg-gradient-to-br from-gray-400 to-gray-600',
-    shadow: 'shadow-sm',
-  },
-  [LeafStatus.RecentActivity]: { // For actively swaying leaves
-    gradient: 'bg-gradient-to-br from-lime-400 to-lime-600',
-    shadow: 'shadow-md',
-    animation: 'animate-gentleSway', // Custom sway in index.html
-  },
+export const STORAGE_KEYS = {
+  consolidatedState: 'productivitree-state',
+  schemaVersion: 'productivitree-schema-version',
+  legacyUser: 'productivitree-user',
+  legacyRoots: 'productivitree-roots',
+  legacyTasks: 'productivitree-tasks',
+  legacyBackground: 'productivitree-background',
+  legacyTreeTheme: 'productivitree-treeTheme',
+  legacyTreeHealth: 'productivitree-health',
+  legacyOnboarding: 'productivitree-onboardingComplete',
+} as const;
+
+export const healthPolicy: HealthPolicyConfig = {
+  decayIntervalMinutes: 60,
+  decayStep: 2,
+  neglectThresholdHours: 48,
+  activityBoostStep: 4,
+  waterBoostStep: 10,
 };
 
-// --- Fruit Style Constants ---
-export const fruitColors: Record<'personal_growth' | 'milestone' | 'opportunity', string> = {
-  personal_growth: 'text-green-500', // #10b981 (Verde)
-  milestone: 'text-red-500',       // #ef4444 (Rojo)
-  opportunity: 'text-amber-500',   // #f97316 (Naranja)
-};
-
-
-// --- Tree Theme Constants ---
-export interface TreeTheme {
-  name: string;
-  leafColors: {
-    base: string; // e.g. green for spring/summer, orange/red for autumn
-    variant: string;
+export const defaultHealthState = (): TreeHealthState => {
+  const now = new Date().toISOString();
+  return {
+    value: 72,
+    lastDecayAt: now,
+    lastWateredAt: null,
+    lastMeaningfulActivityAt: now,
   };
-  branchColor: string;
-  skyColor: string;
-  // Add more properties like flower colors for spring, snow effect for winter etc.
-}
+};
+
+export const defaultUser = (): User => ({
+  id: DEFAULT_USER_ID,
+  passionTestCompleted: false,
+  treeTheme: 'spring',
+  backgroundSetting: 'forest_glow',
+  createdAt: new Date().toISOString(),
+});
+
+export const leafColors: Record<LeafStatus, { fill: string; glow: string }> = {
+  [LeafStatus.Healthy]: { fill: '#36b37e', glow: 'rgba(54,179,126,0.35)' },
+  [LeafStatus.NeedsAttention]: { fill: '#f4b740', glow: 'rgba(244,183,64,0.35)' },
+  [LeafStatus.Neglected]: { fill: '#d2b55b', glow: 'rgba(210,181,91,0.25)' },
+  [LeafStatus.InProgress]: { fill: '#4ea4ff', glow: 'rgba(78,164,255,0.35)' },
+  [LeafStatus.Completed]: { fill: '#8e98a7', glow: 'rgba(142,152,167,0.25)' },
+};
 
 export const treeThemes: Record<string, TreeTheme> = {
-  spring: { name: 'Spring', leafColors: { base: 'text-green-400', variant: 'text-pink-300' }, branchColor: 'text-yellow-700', skyColor: 'bg-blue-300' },
-  summer: { name: 'Summer', leafColors: { base: 'text-green-600', variant: 'text-green-500' }, branchColor: 'text-yellow-800', skyColor: 'bg-sky-500' },
-  autumn: { name: 'Autumn', leafColors: { base: 'text-orange-500', variant: 'text-red-500' }, branchColor: 'text-stone-700', skyColor: 'bg-orange-300' },
-  winter: { name: 'Winter', leafColors: { base: 'text-transparent', variant: 'text-transparent' }, branchColor: 'text-gray-500', skyColor: 'bg-slate-400' }, // Bare branches
+  spring: {
+    name: 'Spring Pulse',
+    branchColor: '#8B5E3C',
+    trunkColor: '#6B4423',
+    rootColor: '#7A2A2A',
+    leafHealthy: '#36b37e',
+    leafWarning: '#f4b740',
+    leafNeglected: '#d2b55b',
+  },
+  cedar: {
+    name: 'Cedar Focus',
+    branchColor: '#7B5A3D',
+    trunkColor: '#5A3F2A',
+    rootColor: '#5E2626',
+    leafHealthy: '#2d9b68',
+    leafWarning: '#e8a822',
+    leafNeglected: '#c9ad52',
+  },
+  dawn: {
+    name: 'Dawn Orchard',
+    branchColor: '#7A5138',
+    trunkColor: '#5D3C29',
+    rootColor: '#6C2D2D',
+    leafHealthy: '#4abf89',
+    leafWarning: '#f2c057',
+    leafNeglected: '#d8bf71',
+  },
 };
-
-// --- Background Themes ---
-
-const FloatingLights: React.FC = () => (
-  React.createElement('div', { className: "absolute inset-0 overflow-hidden pointer-events-none" },
-    Array.from({ length: 20 }).map((_, i) => (
-      React.createElement('div', {
-        key: i,
-        className: "absolute rounded-full bg-yellow-200/30 animate-pulse",
-        style: {
-          width: `${Math.random() * 5 + 2}px`,
-          height: `${Math.random() * 5 + 2}px`,
-          left: `${Math.random() * 100}%`,
-          top: `${Math.random() * 100}%`,
-          animationDuration: `${Math.random() * 3 + 2}s`,
-          animationDelay: `${Math.random() * 2}s`,
-        }
-      })
-    ))
-  )
-);
-
-const MistClouds: React.FC = () => (
-  React.createElement('div', { className: "absolute inset-0 overflow-hidden opacity-30 pointer-events-none" },
-    Array.from({ length: 5 }).map((_, i) => (
-      React.createElement('div', {
-        key: i,
-        className: "absolute bg-slate-400/20 rounded-full filter blur-lg animate-pulse",
-        style: {
-          width: `${Math.random() * 300 + 150}px`,
-          height: `${Math.random() * 100 + 50}px`,
-          left: `${Math.random() * 100 - 25}%`,
-          top: `${Math.random() * 70 + 15}%`,
-          transform: `translateX(${Math.random() * 100 - 50}px) translateY(${Math.random() * 60 - 30}px)`,
-          animationName: 'subtleDrift',
-          animationDuration: `${Math.random() * 40 + 30}s`,
-          animationDelay: `${Math.random() * 5}s`,
-          animationIterationCount: 'infinite',
-          animationTimingFunction: 'linear'
-        }
-      })
-    ))
-  )
-);
-
-
-export interface BackgroundTheme {
-  name: string;
-  backgroundGradient: string;
-  particles?: React.FC;
-  ambientSound?: string; // path to mp3
-  weatherEffects?: string; // e.g. 'gentle_sparkles', 'subtle_fog' (descriptive)
-  textColor: string;
-}
 
 export const backgroundThemes: Record<string, BackgroundTheme> = {
-  enchanted_forest: {
-    name: 'Enchanted Forest',
-    backgroundGradient: 'linear-gradient(to bottom, #1e3a8a, #312e81, #1f2937)',
-    particles: FloatingLights,
-    ambientSound: 'forest_mystical.mp3',
-    weatherEffects: 'gentle_sparkles',
-    textColor: 'text-blue-100',
+  forest_glow: {
+    name: 'Forest Glow',
+    backgroundGradient: 'radial-gradient(circle at 20% 10%, #2f7f6f 0%, #152734 35%, #0f141c 100%)',
+    textColor: 'text-emerald-100',
   },
-  mountain_cliff: {
-    name: 'Mountain Cliff',
-    backgroundGradient: 'linear-gradient(to bottom, #0f172a, #334155, #64748b)',
-    particles: MistClouds,
-    ambientSound: 'mountain_wind.mp3',
-    weatherEffects: 'subtle_fog',
-    textColor: 'text-slate-200',
+  horizon_mist: {
+    name: 'Horizon Mist',
+    backgroundGradient: 'linear-gradient(180deg, #1f3454 0%, #1c2336 35%, #111827 100%)',
+    textColor: 'text-sky-100',
   },
-  serene_dawn: {
-    name: 'Serene Dawn',
-    backgroundGradient: 'linear-gradient(to bottom, #fbc2eb, #a6c1ee)',
-    ambientSound: 'birds_chirping.mp3',
-    weatherEffects: 'soft_glow',
-    textColor: 'text-indigo-800',
-  }
+  sandstone_evening: {
+    name: 'Sandstone Evening',
+    backgroundGradient: 'linear-gradient(180deg, #53393c 0%, #2f2834 45%, #181924 100%)',
+    textColor: 'text-rose-100',
+  },
 };
 
-export const DEFAULT_USER_ID = "default-user";
-
-export const INITIAL_TREE_DATA: TreeNode = {
-  id: "root0",
-  type: 'rootNode',
-  data: { name: "My Productivitree" },
-  children: [
-    {
-      id: "project1",
-      type: "branch",
-      parentId: "root0",
-      data: { name: "First Project" },
-      children: [
-        { id: "task1", parentId: "project1", type: "leaf", data: { name: "Initial Task", status: LeafStatus.Pending, priority: 1 } as any },
-      ]
-    }
-  ]
+export const visualTokens: VisualTokens = {
+  panelSurface: 'rgba(16, 22, 32, 0.74)',
+  panelBorder: 'rgba(142, 183, 146, 0.35)',
+  panelText: '#e6eef7',
+  accent: '#8bdca6',
 };
 
-
-// --- Onboarding Steps ---
-export const ONBOARDING_STEPS_CONFIG = [
-  { id: 'welcome', title: 'Welcome to Productivitree!', description: 'Let\'s get your productivity tree growing.' },
-  { id: 'passion_test', title: 'Discover Your Passions', description: 'A quick test to find what truly motivates you. This will help shape your tree\'s roots.' },
-  { id: 'define_roots', title: 'Define Your Roots', description: 'Based on your passions, establish 3-5 core values or motivations.' },
-  // { id: 'trunk_setup', title: 'Set Up Your Trunk', description: 'Reflect on your current experience and skills that form the base of your tree.' },
-  { id: 'first_projects', title: 'Plant Your First Branches', description: 'Let\'s add 1-2 initial projects or goals you want to work on.' },
-  { id: 'tree_customization', title: 'Customize Your View', description: 'Choose an initial theme and background for your Productivitree.' },
-  { id: 'done', title: 'All Set!', description: 'Your Productivitree is ready to grow. Start adding tasks and watch it flourish!' },
+export const ONBOARDING_STEPS_CONFIG: OnboardingStep[] = [
+  {
+    id: 'welcome',
+    title: 'Welcome to Productivitree',
+    description: 'Your work map grows from purpose to execution. Let us set your foundations.',
+  },
+  {
+    id: 'passion_test',
+    title: 'Discover Core Motivations',
+    description: 'Optional AI-guided reflection. You control if answers are sent for analysis.',
+  },
+  {
+    id: 'define_roots',
+    title: 'Define Roots',
+    description: 'Capture the core values and purposes that anchor your work.',
+  },
+  {
+    id: 'trunk_setup',
+    title: 'Shape Your Trunk',
+    description: 'Capture education, skills, and expertise that support every project.',
+  },
+  {
+    id: 'first_projects',
+    title: 'Create Branches',
+    description: 'Add your current projects as branches with priority and status.',
+  },
+  {
+    id: 'tree_customization',
+    title: 'Select Your Visual Direction',
+    description: 'Pick background and tree style tuned for focus and calm execution.',
+  },
+  {
+    id: 'done',
+    title: 'Grow',
+    description: 'Your tree is ready. Keep leaves healthy with steady attention.',
+  },
 ];
 
-
-// Gemini Model Names
-export const GEMINI_TEXT_MODEL = "gemini-2.5-flash-preview-04-17";
-export const GEMINI_IMAGE_MODEL = "imagen-3.0-generate-002";
-
-// API Key handling and warnings are managed in AppContext.tsx.
+export const TESTER_FEEDBACK_URL =
+  'https://github.com/jlsanzbreton/productivitree/issues/new?title=Beta%20Feedback%20for%20Productivitree&body=What%20worked%3F%0A%0AWhat%20blocked%20you%3F%0A%0AAny%20visual%20or%20flow%20issues%3F';

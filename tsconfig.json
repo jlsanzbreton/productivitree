@@ -22,9 +22,11 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
+    "types": ["react", "react-dom"],
 
     "paths": {
       "@/*" :  ["./*"]
     }
-  }
+  },
+  "exclude": ["vite.config.ts", "netlify", "tests", "scripts", ".github", "node_modules"]
 }

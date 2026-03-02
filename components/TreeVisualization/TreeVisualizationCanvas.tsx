@@ -1,216 +1,281 @@
-
-import React, { useRef, useEffect, useContext } from 'react';
-import * as d3 from 'd3';
-import { TreeNode, TaskData, LeafStatus, AchievementData } from '../../types';
-import { leafColors, fruitColors } from '../../constants';
+import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppContext, AppContextType } from '../../contexts/AppContext';
-
+import { leafColors, treeThemes } from '../../constants';
+import { LeafStatus, TreeNode } from '../../types';
 
 interface TreeVisualizationCanvasProps {
   treeData: TreeNode;
-  onLeafClick: (nodeId: string) => void; // Semicolon added here
+  onNodeClick: (node: TreeNode) => void;
   width?: number;
   height?: number;
 }
 
-const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({ 
-  treeData, 
-  onLeafClick,
-  width: propWidth, 
-  height: propHeight 
-}) => {
+interface HitNode {
+  id: string;
+  x: number;
+  y: number;
+  r: number;
+  node: TreeNode;
+  label: string;
+}
+
+const stringHash = (value: string) =>
+  value.split('').reduce((acc, char) => (acc * 31 + char.charCodeAt(0)) % 100000, 7);
+
+const parseTree = (treeData: TreeNode) => {
+  const roots: TreeNode[] = [];
+  const trunks: TreeNode[] = [];
+  const branches: TreeNode[] = [];
+  const leaves: TreeNode[] = [];
+
+  const walk = (node: TreeNode) => {
+    if (node.type === 'root') roots.push(node);
+    if (node.type === 'trunk') trunks.push(node);
+    if (node.type === 'branch') branches.push(node);
+    if (node.type === 'leaf') leaves.push(node);
+    node.children?.forEach(walk);
+  };
+
+  walk(treeData);
+  return {
+    roots,
+    trunks,
+    branches,
+    leaves,
+  };
+};
+
+const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({ treeData, onNodeClick, width, height }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const hitNodesRef = useRef<HitNode[]>([]);
+  const rafRef = useRef<number | null>(null);
   const { activeTreeTheme, treeHealth } = useContext(AppContext) as AppContextType;
+  const [hoveredNode, setHoveredNode] = useState<HitNode | null>(null);
+  const [tooltip, setTooltip] = useState({ x: 0, y: 0 });
 
+  const theme = useMemo(() => treeThemes[activeTreeTheme] || treeThemes.spring, [activeTreeTheme]);
+  const parsed = useMemo(() => parseTree(treeData), [treeData]);
 
   useEffect(() => {
-    if (!canvasRef.current || !treeData || !containerRef.current) return;
+    if (!canvasRef.current || !containerRef.current) return;
 
     const canvas = canvasRef.current;
-    const context = canvas.getContext('2d');
-    if (!context) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-    const containerWidth = containerRef.current.offsetWidth;
-    const containerHeight = containerRef.current.offsetHeight;
-    
-    const currentWidth = propWidth || containerWidth;
-    const currentHeight = propHeight || containerHeight;
+    const render = (time: number) => {
+      const w = width || containerRef.current?.offsetWidth || 600;
+      const h = height || containerRef.current?.offsetHeight || 520;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
 
-    canvas.width = currentWidth * window.devicePixelRatio;
-    canvas.height = currentHeight * window.devicePixelRatio;
-    canvas.style.width = `${currentWidth}px`;
-    canvas.style.height = `${currentHeight}px`;
-    context.scale(window.devicePixelRatio, window.devicePixelRatio);
+      const sway = Math.sin(time / 1400) * (0.8 + (100 - treeHealth) / 90);
+      const healthFactor = Math.max(0.25, Math.min(1, treeHealth / 100));
+      const trunkX = w / 2;
+      const groundY = h * 0.79;
 
-    context.clearRect(0, 0, currentWidth, currentHeight);
+      const background = ctx.createLinearGradient(0, 0, 0, h);
+      background.addColorStop(0, 'rgba(255,255,255,0.03)');
+      background.addColorStop(1, 'rgba(0,0,0,0.22)');
+      ctx.fillStyle = background;
+      ctx.fillRect(0, 0, w, h);
 
-    // Create a tree layout
-    const root = d3.hierarchy(treeData, d => d.children);
-    const treeLayout = d3.tree<TreeNode>().size([currentWidth * 0.9, currentHeight * 0.8]); // Use 90% of width, 80% of height
-    treeLayout(root);
+      const soil = ctx.createLinearGradient(0, groundY, 0, h);
+      soil.addColorStop(0, 'rgba(62,39,24,0.45)');
+      soil.addColorStop(1, 'rgba(21,16,10,0.75)');
+      ctx.fillStyle = soil;
+      ctx.fillRect(0, groundY, w, h - groundY);
 
-    const healthFactor = treeHealth / 100; // 0 to 1
+      const hitNodes: HitNode[] = [];
 
-    // Center the tree
-    const offsetX = currentWidth * 0.05; // Small margin
-    const offsetY = currentHeight * 0.1; // Margin from top for root
+      const roots = parsed.roots.length > 0 ? parsed.roots : [{ id: 'default-root', type: 'root', data: { title: 'Purpose' } }];
+      roots.forEach((rootNode, index) => {
+        const direction = index % 2 === 0 ? -1 : 1;
+        const spread = (index + 1) * 26;
+        const endX = trunkX + direction * spread;
+        const endY = groundY + 38 + index * 16;
 
-    // Draw links (branches)
-    context.strokeStyle = `rgba(136, 103, 65, ${0.5 + healthFactor * 0.5})`; // Brownish, more vibrant with health
-    context.lineWidth = 2 * healthFactor + 1; // Thicker lines for healthier tree
-    
-    root.links().forEach(link => {
-      const source = link.source as d3.HierarchyPointNode<TreeNode>;
-      const target = link.target as d3.HierarchyPointNode<TreeNode>;
-      context.beginPath();
-      context.moveTo(source.x + offsetX, source.y + offsetY);
-      context.lineTo(target.x + offsetX, target.y + offsetY);
-      context.stroke();
-    });
+        ctx.strokeStyle = theme.rootColor;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(trunkX, groundY);
+        ctx.bezierCurveTo(
+          trunkX + direction * 16,
+          groundY + 20,
+          endX - direction * 8,
+          endY - 10,
+          endX,
+          endY
+        );
+        ctx.stroke();
 
-    // Draw nodes (trunk, leaves, fruits)
-    root.descendants().forEach(node => {
-      const cx = node.x + offsetX;
-      const cy = node.y + offsetY;
+        ctx.fillStyle = theme.rootColor;
+        ctx.beginPath();
+        ctx.arc(endX, endY, 5, 0, Math.PI * 2);
+        ctx.fill();
 
-      context.beginPath();
-      let nodeSize = node.data.size || 5;
-      nodeSize = nodeSize * (0.8 + healthFactor * 0.4); // Nodes slightly larger when healthy
-
-      let nodeColor = node.data.color || '#ccc'; // Default color
-
-      if (node.data.type === 'leaf') {
-        const task = node.data.data as TaskData;
-        const leafStyle = leafColors[task.status];
-        // For canvas, gradient is complex. Use a solid color representation or average.
-        // Example: using the 'from' color of the gradient.
-        if (leafStyle && leafStyle.gradient.includes('from-')) {
-            const fromColorMatch = leafStyle.gradient.match(/from-([a-z]+)-(\d+)/);
-            if (fromColorMatch) {
-                 // This is a simplification; direct Tailwind class to hex/rgb is not trivial
-                const colorMap: Record<string,string> = { teal: '#14b8a6', amber: '#f59e0b', red: '#ef4444', gray: '#9ca3af', lime: '#84cc16'};
-                nodeColor = colorMap[fromColorMatch[1]] || '#ccc';
-            }
-        } else {
-            nodeColor = '#9ca3af'; // Default completed/gray
-        }
-        context.fillStyle = nodeColor;
-        // Apply animation effect if status indicates
-        if (task.status === LeafStatus.RecentActivity || task.status === LeafStatus.Urgent || task.status === LeafStatus.InProgress) {
-          // Simulate pulse/sway by slightly varying size or position over time
-          // This requires a requestAnimationFrame loop, simplified here
-           const time = Date.now() / 1000; // time in seconds
-           if (task.status === LeafStatus.Urgent) {
-             nodeSize *= (1 + Math.sin(time * 5) * 0.1); // Pulsing size
-           } else if (task.status === LeafStatus.RecentActivity) {
-             // Swaying would involve minor x-offset changes
-             // context.arc(cx + Math.sin(time*2)*3, cy, nodeSize, 0, 2 * Math.PI);
-             // For simplicity, just draw a static leaf here
-           }
-        }
-
-        // Draw leaf shape (e.g., ellipse or actual leaf path)
-        context.ellipse(cx, cy, nodeSize * 1.5, nodeSize, Math.PI / 4, 0, 2 * Math.PI);
-
-      } else if (node.data.type === 'fruit') {
-        const achievement = node.data.data as AchievementData; // AchievementData
-        const fruitTypeKey = achievement.type as keyof typeof fruitColors;
-        nodeColor = fruitColors[fruitTypeKey] || '#ffcc00';
-        // Convert Tailwind text color to fill color for canvas
-        if(nodeColor.startsWith('text-')) {
-             const colorName = nodeColor.split('-')[1];
-             // const colorShade = nodeColor.split('-')[2]; // e.g., 500 (not used directly in map)
-             const colorMap: Record<string,string> = { green: '#22c55e', red: '#ef4444', amber: '#f59e0b'}; // Ensure these match your fruitColors definitions
-             context.fillStyle = colorMap[colorName] || '#ffcc00';
-        } else {
-            context.fillStyle = nodeColor;
-        }
-        context.arc(cx, cy, nodeSize, 0, 2 * Math.PI);
-
-      } else if (node.data.type === 'rootNode' || node.data.type === 'trunk' || node.data.type === 'branch') {
-         const baseColor = node.data.type === 'rootNode' || node.data.type === 'trunk' ? `101, 67, 33` : `136, 103, 65`; // Darker brown for trunk, lighter for branches
-         const baseAlpha = node.data.type === 'rootNode' || node.data.type === 'trunk' ? 0.7 : 0.6;
-        context.fillStyle = `rgba(${baseColor}, ${baseAlpha + healthFactor * 0.3})`;
-        
-        if(node.data.type === 'rootNode' || node.data.type === 'trunk'){
-            // A thicker representation for the root/trunk
-            context.rect(cx - nodeSize * 1.5, cy, nodeSize * 3, nodeSize * 2);
-        } else { // branch nodes (usually just connection points)
-            context.arc(cx, cy, nodeSize / 2, 0, 2 * Math.PI); // Smaller circle for branch joints
-        }
-      }
-      
-      context.fill();
-      
-      // Add text label (optional, can make it cluttered)
-      // context.fillStyle = activeTreeTheme === 'dark' ? 'white' : 'black'; // This activeTreeTheme check needs context value
-      // context.font = '10px Arial';
-      // context.textAlign = 'center';
-      // context.fillText((node.data.data as any).name || node.data.id, cx, cy + nodeSize + 10);
-
-    });
-
-    // Handle click events on canvas to identify nodes
-    const clickHandler = (event: MouseEvent) => {
-      if (!canvasRef.current) return;
-      const rect = canvasRef.current.getBoundingClientRect();
-      const x = (event.clientX - rect.left);
-      const y = (event.clientY - rect.top);
-
-      root.descendants().forEach(nodePoint => {
-        const dNode = nodePoint;
-        const nodeDrawX = dNode.x + offsetX;
-        const nodeDrawY = dNode.y + offsetY;
-        // Recalculate nodeDrawSize based on its type as it might differ (leaf vs fruit vs branch point)
-        let hitTestSize = (dNode.data.size || 5) * (0.8 + healthFactor * 0.4);
-        if (dNode.data.type === 'leaf') hitTestSize *= 1.5; // Ellipse major radius for leaves
-        else if (dNode.data.type === 'branch') hitTestSize /= 2; // Smaller hit area for branch joints
-
-
-        // Simple circular hit detection
-        const distance = Math.sqrt(Math.pow(x - nodeDrawX, 2) + Math.pow(y - nodeDrawY, 2));
-        
-        if (distance < hitTestSize) { 
-          if (dNode.data.type === 'leaf') {
-            onLeafClick(dNode.data.id);
-          }
-          // console.log('Clicked node:', dNode.data);
-        }
+        hitNodes.push({
+          id: rootNode.id,
+          x: endX,
+          y: endY,
+          r: 11,
+          node: rootNode as TreeNode,
+          label: String((rootNode.data as Record<string, unknown>)?.title || 'Core Root'),
+        });
       });
+
+      ctx.strokeStyle = theme.trunkColor;
+      ctx.lineCap = 'round';
+      ctx.lineWidth = 24 * healthFactor;
+      ctx.beginPath();
+      ctx.moveTo(trunkX, groundY);
+      ctx.bezierCurveTo(trunkX - 10, h * 0.6, trunkX + 8, h * 0.38, trunkX, h * 0.2);
+      ctx.stroke();
+
+      const trunkNodes = parsed.trunks.filter((node) => node.id !== 'trunk-hub');
+      trunkNodes.forEach((node, index) => {
+        const y = groundY - (index + 1) * ((groundY - h * 0.2) / Math.max(trunkNodes.length + 1, 2));
+        ctx.fillStyle = theme.trunkColor;
+        ctx.beginPath();
+        ctx.arc(trunkX, y, 8, 0, Math.PI * 2);
+        ctx.fill();
+        hitNodes.push({
+          id: node.id,
+          x: trunkX,
+          y,
+          r: 12,
+          node,
+          label: String((node.data as Record<string, unknown>)?.title || 'Skill Segment'),
+        });
+      });
+
+      const branches = parsed.branches;
+      branches.forEach((branch, index) => {
+        const side = index % 2 === 0 ? -1 : 1;
+        const depth = Math.floor(index / 2);
+        const startY = h * (0.55 - depth * 0.06);
+        const branchLength = Math.max(80, w * (0.17 + (index % 3) * 0.04));
+        const endX = trunkX + side * (branchLength + sway * 8);
+        const endY = startY - 24 - depth * 8;
+        const cpOffset = 24 + depth * 8;
+
+        ctx.strokeStyle = theme.branchColor;
+        ctx.lineWidth = 7 * healthFactor;
+        ctx.beginPath();
+        ctx.moveTo(trunkX, startY);
+        ctx.bezierCurveTo(
+          trunkX + side * cpOffset,
+          startY - 20,
+          endX - side * cpOffset,
+          endY + 10,
+          endX,
+          endY
+        );
+        ctx.stroke();
+
+        ctx.fillStyle = theme.branchColor;
+        ctx.beginPath();
+        ctx.arc(endX, endY, 6, 0, Math.PI * 2);
+        ctx.fill();
+
+        hitNodes.push({
+          id: branch.id,
+          x: endX,
+          y: endY,
+          r: 13,
+          node: branch,
+          label: String((branch.data as Record<string, unknown>)?.title || 'Project Branch'),
+        });
+
+        const projectLeaves = parsed.leaves.filter(
+          (leaf) => String((leaf.data as Record<string, unknown>)?.projectId || '') === branch.id
+        );
+        projectLeaves.forEach((leaf, leafIndex) => {
+          const hash = stringHash(leaf.id);
+          const orbit = 18 + (hash % 26);
+          const angle = ((leafIndex + 1) * Math.PI) / Math.max(projectLeaves.length + 1, 2);
+          const lx = endX + Math.cos(angle + (hash % 5) * 0.2) * orbit + side * 8;
+          const ly = endY - Math.sin(angle) * orbit - 5;
+          const stageStatus = (leaf.data as Record<string, unknown>)?.status as LeafStatus;
+          const statusColor = leafColors[stageStatus] || leafColors[LeafStatus.Healthy];
+
+          let fillColor = statusColor.fill;
+          if (treeHealth < 45 && (stageStatus === LeafStatus.Healthy || stageStatus === LeafStatus.NeedsAttention)) {
+            fillColor = leafColors[LeafStatus.Neglected].fill;
+          }
+
+          ctx.fillStyle = fillColor;
+          ctx.shadowColor = statusColor.glow;
+          ctx.shadowBlur = 10;
+          ctx.beginPath();
+          ctx.ellipse(lx, ly, 8, 5.5, (hash % 20) * 0.05 + sway * 0.02, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+
+          hitNodes.push({
+            id: leaf.id,
+            x: lx,
+            y: ly,
+            r: 11,
+            node: leaf,
+            label: String((leaf.data as Record<string, unknown>)?.title || 'Stage'),
+          });
+        });
+      });
+
+      hitNodesRef.current = hitNodes;
+      rafRef.current = requestAnimationFrame(render);
     };
 
-    canvas.addEventListener('click', clickHandler);
-
-    // Animation loop for dynamic effects like pulse/sway
-    let animationFrameId: number;
-    const renderLoop = () => {
-        // This is where you would redraw parts of the canvas that animate
-        // For instance, to make 'urgent' tasks pulse without redrawing everything:
-        // Clear only specific areas or re-draw only animated nodes.
-        // For simplicity, this example re-draws everything on data change,
-        // true canvas animation would be more optimized.
-        
-        // If any node has an animation like pulse, you'd trigger a re-draw of that node.
-        // The current useEffect handles re-draw on treeData change, which is less frequent.
-        // For continuous animations:
-        // context.clearRect(0,0, currentWidth, currentHeight); // Or selective clear
-        // ... draw all elements, applying time-based transformations for animations ...
-        // animationFrameId = requestAnimationFrame(renderLoop);
-    };
-    // renderLoop(); // Uncomment for continuous animation
-
+    rafRef.current = requestAnimationFrame(render);
     return () => {
-      canvas.removeEventListener('click', clickHandler);
-      // cancelAnimationFrame(animationFrameId); // If using continuous animation
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
+  }, [parsed, theme, treeHealth, width, height]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [treeData, activeTreeTheme, treeHealth, propWidth, propHeight, onLeafClick]); // Rerender on data or theme change
+  const getHitNode = (clientX: number, clientY: number) => {
+    if (!canvasRef.current) return null;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    return hitNodesRef.current.find((node) => (x - node.x) ** 2 + (y - node.y) ** 2 <= node.r ** 2) || null;
+  };
 
   return (
-    <div ref={containerRef} className="w-full h-full flex justify-center items-center relative z-10">
-        <canvas ref={canvasRef} className="rounded-lg shadow-2xl"></canvas>
+    <div ref={containerRef} className="w-full h-full relative rounded-xl overflow-hidden">
+      <canvas
+        ref={canvasRef}
+        className="w-full h-full rounded-xl"
+        onMouseMove={(event) => {
+          const hitNode = getHitNode(event.clientX, event.clientY);
+          setHoveredNode(hitNode);
+          if (hitNode && canvasRef.current) {
+            const rect = canvasRef.current.getBoundingClientRect();
+            setTooltip({ x: event.clientX - rect.left + 10, y: event.clientY - rect.top + 10 });
+          }
+        }}
+        onMouseLeave={() => setHoveredNode(null)}
+        onClick={(event) => {
+          const hitNode = getHitNode(event.clientX, event.clientY);
+          if (hitNode) {
+            onNodeClick(hitNode.node);
+          }
+        }}
+      />
+      {hoveredNode && (
+        <div
+          className="absolute pointer-events-none text-xs px-2 py-1 rounded-md bg-black/75 text-emerald-100 border border-emerald-500/30"
+          style={{ left: tooltip.x, top: tooltip.y }}
+        >
+          {hoveredNode.label}
+        </div>
+      )}
     </div>
   );
 };

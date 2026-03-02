@@ -2,7 +2,7 @@
 import React, { useContext } from 'react';
 import { AppContext, AppContextType } from '../../contexts/AppContext';
 import { PlusCircleIcon, AdjustmentsHorizontalIcon, SunIcon, MoonIcon, SparklesIcon } from '../Icons/HeroIcons'; // Assuming hero icons
-import { backgroundThemes } from '../../constants';
+import { backgroundThemes, TESTER_FEEDBACK_URL } from '../../constants';
 
 
 const Footer: React.FC<{ onAddTask: () => void }> = ({ onAddTask }) => {
@@ -25,7 +25,7 @@ const Footer: React.FC<{ onAddTask: () => void }> = ({ onAddTask }) => {
 
   return (
     <footer className="bg-gray-800/60 backdrop-blur-md p-3 shadow-top-lg z-20">
-      <div className="max-w-4xl mx-auto flex justify-around items-center">
+      <div className="max-w-5xl mx-auto flex justify-around items-center gap-2">
         <button
           onClick={waterTree}
           disabled={treeHealth >= 100}
@@ -48,11 +48,20 @@ const Footer: React.FC<{ onAddTask: () => void }> = ({ onAddTask }) => {
         <button
           onClick={cycleBackground}
           className="flex flex-col items-center text-center px-3 py-2 rounded-lg hover:bg-purple-700/50 transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500"
-          title={`Change Theme (Current: ${backgroundThemes[activeBackground].name})`}
+          title={`Change Theme (Current: ${backgroundThemes[activeBackground]?.name || 'Unknown'})`}
         >
           <ThemeIcon className="h-7 w-7 text-purple-300"/>
           <span className="text-xs mt-1 text-purple-300">Theme</span>
         </button>
+        <a
+          href={TESTER_FEEDBACK_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs text-sky-300 underline px-2 py-1 hover:text-sky-200"
+          title="Send Beta Feedback"
+        >
+          Feedback
+        </a>
       </div>
     </footer>
   );
