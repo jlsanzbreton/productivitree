@@ -83,53 +83,53 @@ const parseTree = (treeData: TreeNode) => {
 
 const stageColorsBySpecies: Record<TreeSpecies, Record<LeafStatus, { fill: string; glow: string }>> = {
   oak: {
-    [LeafStatus.Healthy]: { fill: '#49ff98', glow: 'rgba(73,255,152,0.62)' },
-    [LeafStatus.NeedsAttention]: { fill: '#f8d65b', glow: 'rgba(248,214,91,0.58)' },
-    [LeafStatus.Neglected]: { fill: '#d8bf6f', glow: 'rgba(216,191,111,0.45)' },
-    [LeafStatus.InProgress]: { fill: '#58e2ff', glow: 'rgba(88,226,255,0.58)' },
-    [LeafStatus.Completed]: { fill: '#9ca9c4', glow: 'rgba(156,169,196,0.4)' },
+    [LeafStatus.Healthy]: { fill: '#FEEA96', glow: 'rgba(254, 234, 150, 0.72)' },
+    [LeafStatus.NeedsAttention]: { fill: '#E6A218', glow: 'rgba(230, 162, 24, 0.58)' },
+    [LeafStatus.Neglected]: { fill: '#A59765', glow: 'rgba(165, 151, 101, 0.4)' },
+    [LeafStatus.InProgress]: { fill: '#F9D967', glow: 'rgba(249, 217, 103, 0.62)' },
+    [LeafStatus.Completed]: { fill: '#FEEDA0', glow: 'rgba(254, 237, 160, 0.76)' },
   },
   fir: {
-    [LeafStatus.Healthy]: { fill: '#36ffd2', glow: 'rgba(54,255,210,0.62)' },
-    [LeafStatus.NeedsAttention]: { fill: '#6fffb6', glow: 'rgba(111,255,182,0.52)' },
-    [LeafStatus.Neglected]: { fill: '#95c8a8', glow: 'rgba(149,200,168,0.4)' },
-    [LeafStatus.InProgress]: { fill: '#2ad8ff', glow: 'rgba(42,216,255,0.55)' },
-    [LeafStatus.Completed]: { fill: '#84a5ac', glow: 'rgba(132,165,172,0.36)' },
+    [LeafStatus.Healthy]: { fill: '#FEE688', glow: 'rgba(254, 230, 138, 0.68)' },
+    [LeafStatus.NeedsAttention]: { fill: '#DD7E00', glow: 'rgba(221, 126, 0, 0.52)' },
+    [LeafStatus.Neglected]: { fill: '#8A7649', glow: 'rgba(138, 118, 73, 0.34)' },
+    [LeafStatus.InProgress]: { fill: '#F9D967', glow: 'rgba(249, 217, 103, 0.58)' },
+    [LeafStatus.Completed]: { fill: '#FEEA96', glow: 'rgba(254, 234, 150, 0.72)' },
   },
   cherry: {
-    [LeafStatus.Healthy]: { fill: '#ff7fdd', glow: 'rgba(255,127,221,0.62)' },
-    [LeafStatus.NeedsAttention]: { fill: '#ff9ce8', glow: 'rgba(255,156,232,0.56)' },
-    [LeafStatus.Neglected]: { fill: '#d6a1c8', glow: 'rgba(214,161,200,0.42)' },
-    [LeafStatus.InProgress]: { fill: '#bf82ff', glow: 'rgba(191,130,255,0.58)' },
-    [LeafStatus.Completed]: { fill: '#b19bc5', glow: 'rgba(177,155,197,0.36)' },
+    [LeafStatus.Healthy]: { fill: '#FEEC9D', glow: 'rgba(254, 236, 157, 0.74)' },
+    [LeafStatus.NeedsAttention]: { fill: '#E98500', glow: 'rgba(233, 133, 0, 0.55)' },
+    [LeafStatus.Neglected]: { fill: '#9A8350', glow: 'rgba(154, 131, 80, 0.38)' },
+    [LeafStatus.InProgress]: { fill: '#FEE688', glow: 'rgba(254, 230, 138, 0.62)' },
+    [LeafStatus.Completed]: { fill: '#FEEDA0', glow: 'rgba(254, 237, 160, 0.78)' },
   },
 };
 
 const speciesPalette = (species: TreeSpecies, trunkColor: string, branchColor: string, rootColor: string) => {
   if (species === 'fir') {
     return {
-      trunk: '#3f4f57',
-      branch: '#4f676f',
-      root: '#3e3f5c',
-      glow: 'rgba(45,255,214,0.28)',
-      canopy: 'rgba(39, 255, 220, 0.1)',
+      trunk: '#C9901E',
+      branch: '#D9A33A',
+      root: '#B2710E',
+      glow: 'rgba(217, 122, 0, 0.3)',
+      canopy: 'rgba(217, 122, 0, 0.12)',
     };
   }
   if (species === 'cherry') {
     return {
-      trunk: '#3c3442',
-      branch: '#4f4059',
-      root: '#45324b',
-      glow: 'rgba(255,120,216,0.28)',
-      canopy: 'rgba(242, 121, 255, 0.1)',
+      trunk: '#B8842A',
+      branch: '#E6A218',
+      root: '#9A650F',
+      glow: 'rgba(254, 234, 150, 0.28)',
+      canopy: 'rgba(254, 234, 150, 0.1)',
     };
   }
   return {
     trunk: trunkColor,
     branch: branchColor,
     root: rootColor,
-    glow: 'rgba(88, 255, 188, 0.26)',
-    canopy: 'rgba(90, 255, 180, 0.09)',
+    glow: 'rgba(217, 122, 0, 0.28)',
+    canopy: 'rgba(254, 234, 150, 0.09)',
   };
 };
 
@@ -221,15 +221,15 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
       const palette = speciesPalette(treeSpecies, theme.trunkColor, theme.branchColor, theme.rootColor);
 
       const skyGradient = ctx.createLinearGradient(0, 0, 0, h);
-      skyGradient.addColorStop(0, '#04070f');
-      skyGradient.addColorStop(0.44, '#091224');
-      skyGradient.addColorStop(1, '#05070d');
+      skyGradient.addColorStop(0, '#101113');
+      skyGradient.addColorStop(0.44, '#0E0F11');
+      skyGradient.addColorStop(1, '#070707');
       ctx.fillStyle = skyGradient;
       ctx.fillRect(0, 0, w, h);
 
       const atmosphericGlow = ctx.createRadialGradient(w * 0.24, h * 0.2, 24, w * 0.45, h * 0.36, w * 0.7);
-      atmosphericGlow.addColorStop(0, 'rgba(56, 189, 248, 0.2)');
-      atmosphericGlow.addColorStop(0.4, 'rgba(16, 185, 129, 0.11)');
+      atmosphericGlow.addColorStop(0, 'rgba(217, 122, 0, 0.26)');
+      atmosphericGlow.addColorStop(0.42, 'rgba(254, 234, 150, 0.12)');
       atmosphericGlow.addColorStop(1, 'rgba(4, 8, 16, 0)');
       ctx.fillStyle = atmosphericGlow;
       ctx.fillRect(0, 0, w, h);
@@ -241,8 +241,8 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
       ctx.fillRect(0, 0, w, h);
 
       const soil = ctx.createLinearGradient(0, groundY, 0, h);
-      soil.addColorStop(0, 'rgba(39, 27, 26, 0.55)');
-      soil.addColorStop(1, 'rgba(11, 8, 8, 0.9)');
+      soil.addColorStop(0, 'rgba(38, 28, 15, 0.52)');
+      soil.addColorStop(1, 'rgba(8, 6, 5, 0.94)');
       ctx.fillStyle = soil;
       ctx.fillRect(0, groundY, w, h - groundY);
 
@@ -677,7 +677,7 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
   return (
     <div
       ref={containerRef}
-      className="w-full h-full relative rounded-2xl overflow-hidden border border-cyan-200/10 shadow-[0_20px_50px_rgba(2,6,23,0.6),inset_0_0_120px_rgba(16,185,129,0.08)]"
+      className="w-full h-full relative rounded-2xl overflow-hidden border border-yellow-700/35 shadow-[0_20px_50px_rgba(0,0,0,0.62),inset_0_0_120px_rgba(217,122,0,0.12)]"
     >
       <canvas
         ref={canvasRef}
@@ -700,7 +700,7 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
       />
       {hoveredNode && (
         <div
-          className="absolute pointer-events-none text-xs px-2 py-1 rounded-md border border-cyan-200/30 bg-slate-950/75 text-cyan-100 shadow-[0_0_18px_rgba(56,189,248,0.38)]"
+          className="absolute pointer-events-none text-xs px-2 py-1 rounded-md border border-yellow-500/40 bg-black/75 text-[#FEEA96] shadow-[0_0_18px_rgba(217,122,0,0.45)]"
           style={{ left: tooltip.x, top: tooltip.y }}
         >
           {hoveredNode.label}

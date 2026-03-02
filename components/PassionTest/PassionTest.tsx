@@ -95,8 +95,8 @@ const PassionTest: React.FC<{ onComplete?: () => void }> = ({ onComplete }) => {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center p-6 bg-gray-800 rounded-lg shadow-xl text-white h-full max-h-[80vh] w-full max-w-2xl overflow-y-auto">
-        <ArrowPathIcon className="h-12 w-12 text-blue-400 animate-spin mb-4" />
+      <div className="flex flex-col items-center justify-center p-6 bg-[#101113]/90 border border-yellow-700/30 rounded-lg shadow-xl text-[#FCEFC6] h-full max-h-[80vh] w-full max-w-2xl overflow-y-auto">
+        <ArrowPathIcon className="h-12 w-12 text-[#F9D967] animate-spin mb-4" />
         <p className="text-xl">Analyzing your reflections...</p>
       </div>
     );
@@ -104,53 +104,53 @@ const PassionTest: React.FC<{ onComplete?: () => void }> = ({ onComplete }) => {
 
   if (isSubmitted && passionTestResult) {
     return (
-      <div className="p-6 bg-gray-800 rounded-lg shadow-xl text-white h-full max-h-[80vh] w-full max-w-2xl overflow-y-auto">
+      <div className="p-6 bg-[#101113]/90 border border-yellow-700/30 rounded-lg shadow-xl text-[#FCEFC6] h-full max-h-[80vh] w-full max-w-2xl overflow-y-auto">
         <div className="flex items-center mb-6">
-          <CheckCircleIcon className="h-10 w-10 text-green-400 mr-3" />
-          <h2 className="text-3xl font-bold text-green-400">Passion Insights</h2>
+          <CheckCircleIcon className="h-10 w-10 text-[#FEEA96] mr-3" />
+          <h2 className="text-3xl font-bold text-[#F9D967]">Passion Insights</h2>
         </div>
 
         {error && <p className="text-red-400 bg-red-900/50 p-3 rounded-md mb-4">{error}</p>}
-        {localMessage && <p className="text-sky-300 bg-sky-900/40 p-3 rounded-md mb-4">{localMessage}</p>}
+        {localMessage && <p className="text-[#FEEA96] bg-yellow-900/20 border border-yellow-700/30 p-3 rounded-md mb-4">{localMessage}</p>}
 
         <div className="mb-6">
-          <h3 className="text-xl font-semibold text-blue-300 mb-2">Identified Categories</h3>
+          <h3 className="text-xl font-semibold text-[#F9D967] mb-2">Identified Categories</h3>
           {passionTestResult.passion_categories.length > 0 ? (
             <ul className="list-disc list-inside space-y-1 pl-4">
               {passionTestResult.passion_categories.map((category, index) => (
-                <li key={index} className="text-gray-200">
+                <li key={index} className="text-amber-50/90">
                   {category}
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="text-gray-400">No categories generated yet.</p>
+            <p className="text-amber-100/50">No categories generated yet.</p>
           )}
         </div>
 
         <div className="mb-6">
-          <h3 className="text-xl font-semibold text-purple-300 mb-2">Suggested Roots</h3>
+          <h3 className="text-xl font-semibold text-[#F9D967] mb-2">Suggested Roots</h3>
           {passionTestResult.root_suggestions.length > 0 ? (
             <div className="space-y-3">
               {passionTestResult.root_suggestions.map((root, index) => (
-                <div key={index} className="p-3 bg-gray-700 rounded-md shadow">
-                  <p className="font-bold text-purple-200">
+                <div key={index} className="p-3 bg-[#17181B] border border-yellow-700/25 rounded-md shadow">
+                  <p className="font-bold text-[#FEEA96]">
                     {root.title} (Strength: {root.strength}/10)
                   </p>
-                  <p className="text-sm text-gray-300">{root.description}</p>
+                  <p className="text-sm text-amber-100/75">{root.description}</p>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-gray-400">No root suggestions generated.</p>
+            <p className="text-amber-100/50">No root suggestions generated.</p>
           )}
         </div>
 
         <div className="mb-8">
-          <h3 className="text-xl font-semibold text-yellow-300 mb-2 flex items-center">
+          <h3 className="text-xl font-semibold text-[#FEEA96] mb-2 flex items-center">
             <LightBulbIcon className="h-6 w-6 mr-2" /> Personalized Insights
           </h3>
-          <p className="text-gray-200 italic bg-gray-700 p-3 rounded-md">
+          <p className="text-amber-50/90 italic bg-[#17181B] border border-yellow-700/25 p-3 rounded-md">
             {passionTestResult.personalized_insights || 'No specific insights generated.'}
           </p>
         </div>
@@ -171,13 +171,13 @@ const PassionTest: React.FC<{ onComplete?: () => void }> = ({ onComplete }) => {
   }
 
   return (
-    <div className="p-4 sm:p-6 bg-gray-800 rounded-lg shadow-xl text-white h-full max-h-[90vh] sm:max-h-[80vh] w-full max-w-2xl flex flex-col overflow-hidden">
-      <h2 className="text-2xl sm:text-3xl font-bold mb-2 text-center text-blue-300">Discover Your Passions</h2>
-      <p className="text-sm text-gray-400 mb-4 text-center">
+    <div className="p-4 sm:p-6 bg-[#101113]/90 border border-yellow-700/30 rounded-lg shadow-xl text-[#FCEFC6] h-full max-h-[90vh] sm:max-h-[80vh] w-full max-w-2xl flex flex-col overflow-hidden">
+      <h2 className="text-2xl sm:text-3xl font-bold mb-2 text-center bg-clip-text text-transparent bg-gradient-to-r from-[#D97A00] via-[#F9D967] to-[#FEEA96]">Discover Your Passions</h2>
+      <p className="text-sm text-amber-100/55 mb-4 text-center">
         Modo offline-first: puedes guardar el borrador local y seguir sin análisis IA.
       </p>
 
-      <label className="flex items-start gap-2 text-xs text-gray-300 bg-gray-700/70 p-3 rounded-md">
+      <label className="flex items-start gap-2 text-xs text-amber-100/75 bg-[#17181B]/85 border border-yellow-700/25 p-3 rounded-md">
         <input
           type="checkbox"
           checked={consent.aiReflectionConsent}
@@ -187,23 +187,23 @@ const PassionTest: React.FC<{ onComplete?: () => void }> = ({ onComplete }) => {
         <span>I consent to server-side AI processing for passion insights.</span>
       </label>
 
-      {localMessage && <p className="text-sky-300 mt-2 text-sm">{localMessage}</p>}
+      {localMessage && <p className="text-[#FEEA96] mt-2 text-sm">{localMessage}</p>}
       {passionDraftStatus.lastAttemptStatus && (
-        <p className="text-xs text-gray-400 mt-1">Último estado: {passionDraftStatus.lastAttemptStatus}</p>
+        <p className="text-xs text-amber-100/55 mt-1">Último estado: {passionDraftStatus.lastAttemptStatus}</p>
       )}
 
       <div className="flex-grow overflow-y-auto pr-2 space-y-4 mt-4">
-        <div className="mb-1 p-3 bg-gray-700 rounded-md">
-          <label htmlFor={`question-${currentQuestionIndex}`} className="block text-md font-medium text-gray-200 mb-2">
+        <div className="mb-1 p-3 bg-[#17181B] border border-yellow-700/25 rounded-md">
+          <label htmlFor={`question-${currentQuestionIndex}`} className="block text-md font-medium text-[#FEEA96] mb-2">
             Question {currentQuestionIndex + 1} of {passionTestQuestions.length}
           </label>
-          <p className="text-gray-300 mb-2">{passionTestQuestions[currentQuestionIndex]}</p>
+          <p className="text-amber-100/75 mb-2">{passionTestQuestions[currentQuestionIndex]}</p>
           <textarea
             id={`question-${currentQuestionIndex}`}
             value={answers[currentQuestionIndex]}
             onChange={(event) => handleAnswerChange(currentQuestionIndex, event.target.value)}
             rows={5}
-            className="w-full p-2.5 bg-gray-600 border border-gray-500 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400 text-white"
+            className="w-full p-2.5 bg-[#111214] border border-yellow-700/30 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 placeholder-yellow-200/30 text-[#FCEFC6]"
             placeholder="Your thoughts..."
           />
         </div>
@@ -211,7 +211,7 @@ const PassionTest: React.FC<{ onComplete?: () => void }> = ({ onComplete }) => {
 
       {error && <p className="text-red-400 mt-2 text-sm text-center">{error}</p>}
 
-      <div className="mt-6 pt-4 border-t border-gray-700 flex flex-col gap-3">
+      <div className="mt-6 pt-4 border-t border-yellow-700/25 flex flex-col gap-3">
         <div className="flex flex-col sm:flex-row justify-between items-center gap-3">
           <Button onClick={() => setCurrentQuestionIndex((prev) => Math.max(0, prev - 1))} disabled={currentQuestionIndex === 0} variant="secondary" className="w-full sm:w-auto">
             Previous

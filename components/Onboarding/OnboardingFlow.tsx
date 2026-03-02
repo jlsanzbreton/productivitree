@@ -117,15 +117,15 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
     (currentStep.id === 'first_projects' && !hasValidProjects);
 
   return (
-    <div className="p-4 sm:p-8 bg-gray-900/90 border border-emerald-600/30 rounded-xl shadow-2xl text-white w-full max-w-3xl mx-auto max-h-[92vh] flex flex-col">
-      <h2 className="text-2xl sm:text-3xl font-bold mb-2 text-center text-emerald-300">{currentStep.title}</h2>
-      <p className="text-sm text-gray-300 mb-6 text-center">{currentStep.description}</p>
+    <div className="p-4 sm:p-8 bg-[#101113]/90 border border-yellow-700/30 rounded-xl shadow-2xl text-[#FCEFC6] w-full max-w-3xl mx-auto max-h-[92vh] flex flex-col">
+      <h2 className="text-2xl sm:text-3xl font-bold mb-2 text-center bg-clip-text text-transparent bg-gradient-to-r from-[#D97A00] via-[#F9D967] to-[#FEEA96]">{currentStep.title}</h2>
+      <p className="text-sm text-amber-100/75 mb-6 text-center">{currentStep.description}</p>
 
       <div className="flex-grow overflow-y-auto pr-2 space-y-6">
         {currentStep.id === 'welcome' && (
           <div className="text-center space-y-3">
             <p className="text-lg">Roots are your purpose. Trunk is your capability. Branches are your projects. Leaves are your stages.</p>
-            <p className="text-gray-400">Balanced focus mode avoids pressure loops while keeping attention visible.</p>
+            <p className="text-amber-100/55">Balanced focus mode avoids pressure loops while keeping attention visible.</p>
           </div>
         )}
 
@@ -136,23 +136,23 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
         )}
 
         {currentStep.id === 'passion_test' && (
-          <div className="p-3 rounded-md border border-sky-500/40 bg-sky-900/20 text-sm text-sky-100">
+          <div className="p-3 rounded-md border border-yellow-700/40 bg-yellow-900/15 text-sm text-[#FEEA96]">
             Paso opcional: puedes continuar sin análisis de IA. Tus respuestas quedan guardadas localmente para reintentar manualmente.
           </div>
         )}
 
         {currentStep.id === 'passion_test' && !showPassionTest && passionTestResult && (
-          <div className="p-4 bg-gray-800 rounded-lg border border-emerald-500/30 text-center">
-            <CheckCircleIcon className="h-12 w-12 text-emerald-400 mx-auto mb-2" />
+          <div className="p-4 bg-[#17181B] rounded-lg border border-yellow-700/30 text-center">
+            <CheckCircleIcon className="h-12 w-12 text-[#FEEA96] mx-auto mb-2" />
             <p className="font-semibold">Reflection complete.</p>
-            <p className="text-sm text-gray-300">Insights are ready and root suggestions were prepared.</p>
+            <p className="text-sm text-amber-100/65">Insights are ready and root suggestions were prepared.</p>
           </div>
         )}
 
         {currentStep.id === 'define_roots' && (
           <div className="space-y-3">
             {roots.map((root, index) => (
-              <div key={`root-${index}`} className="bg-gray-800 p-3 rounded-md space-y-2">
+              <div key={`root-${index}`} className="bg-[#17181B] p-3 rounded-md space-y-2 border border-yellow-700/25">
                 <input
                   placeholder="Core value or purpose"
                   value={root.title}
@@ -161,7 +161,7 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
                       prev.map((item, itemIndex) => (itemIndex === index ? { ...item, title: event.target.value } : item))
                     )
                   }
-                  className="w-full p-2 rounded bg-gray-700 border border-gray-600"
+                  className="w-full p-2 rounded bg-[#111214] border border-yellow-700/30 text-[#FCEFC6]"
                 />
                 <textarea
                   placeholder="Why this root matters"
@@ -174,7 +174,7 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
                     )
                   }
                   rows={2}
-                  className="w-full p-2 rounded bg-gray-700 border border-gray-600"
+                  className="w-full p-2 rounded bg-[#111214] border border-yellow-700/30 text-[#FCEFC6]"
                 />
               </div>
             ))}
@@ -189,7 +189,7 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
         {currentStep.id === 'trunk_setup' && (
           <div className="space-y-3">
             {trunk.map((segment, index) => (
-              <div key={`trunk-${index}`} className="bg-gray-800 p-3 rounded-md space-y-2">
+              <div key={`trunk-${index}`} className="bg-[#17181B] p-3 rounded-md space-y-2 border border-yellow-700/25">
                 <input
                   placeholder="Skill or expertise"
                   value={segment.title}
@@ -198,7 +198,7 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
                       prev.map((item, itemIndex) => (itemIndex === index ? { ...item, title: event.target.value } : item))
                     )
                   }
-                  className="w-full p-2 rounded bg-gray-700 border border-gray-600"
+                  className="w-full p-2 rounded bg-[#111214] border border-yellow-700/30 text-[#FCEFC6]"
                 />
                 <textarea
                   placeholder="Context or education behind this capability"
@@ -211,7 +211,7 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
                     )
                   }
                   rows={2}
-                  className="w-full p-2 rounded bg-gray-700 border border-gray-600"
+                  className="w-full p-2 rounded bg-[#111214] border border-yellow-700/30 text-[#FCEFC6]"
                 />
               </div>
             ))}
@@ -231,7 +231,7 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
         {currentStep.id === 'first_projects' && (
           <div className="space-y-3">
             {projects.map((project, index) => (
-              <div key={`project-${index}`} className="bg-gray-800 p-3 rounded-md space-y-2">
+              <div key={`project-${index}`} className="bg-[#17181B] p-3 rounded-md space-y-2 border border-yellow-700/25">
                 <input
                   placeholder="Project branch title"
                   value={project.title}
@@ -240,7 +240,7 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
                       prev.map((item, itemIndex) => (itemIndex === index ? { ...item, title: event.target.value } : item))
                     )
                   }
-                  className="w-full p-2 rounded bg-gray-700 border border-gray-600"
+                  className="w-full p-2 rounded bg-[#111214] border border-yellow-700/30 text-[#FCEFC6]"
                 />
                 <textarea
                   placeholder="Outcome or scope"
@@ -253,7 +253,7 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
                     )
                   }
                   rows={2}
-                  className="w-full p-2 rounded bg-gray-700 border border-gray-600"
+                  className="w-full p-2 rounded bg-[#111214] border border-yellow-700/30 text-[#FCEFC6]"
                 />
               </div>
             ))}
@@ -271,14 +271,14 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
         {currentStep.id === 'tree_customization' && (
           <div className="space-y-5">
             <div>
-              <h4 className="font-semibold mb-2 text-emerald-300">Backgrounds</h4>
+              <h4 className="font-semibold mb-2 text-[#F9D967]">Backgrounds</h4>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {Object.entries(backgroundThemes).map(([key, theme]) => (
                   <button
                     key={key}
                     onClick={() => setActiveBackground(key)}
                     className={`p-3 rounded-lg border ${
-                      activeBackground === key ? 'border-emerald-400' : 'border-gray-700'
+                      activeBackground === key ? 'border-yellow-500 shadow-[0_0_24px_rgba(217,122,0,0.3)]' : 'border-yellow-700/30'
                     }`}
                     style={{ background: theme.backgroundGradient }}
                   >
@@ -288,15 +288,15 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
               </div>
             </div>
             <div>
-              <h4 className="font-semibold mb-2 text-emerald-300">Tree Style</h4>
+              <h4 className="font-semibold mb-2 text-[#F9D967]">Tree Style</h4>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {Object.entries(treeThemes).map(([key, theme]) => (
                   <button
                     key={key}
                     onClick={() => setActiveTreeTheme(key)}
                     className={`p-3 rounded-lg border ${
-                      activeTreeTheme === key ? 'border-emerald-400' : 'border-gray-700'
-                    } bg-gray-800`}
+                      activeTreeTheme === key ? 'border-yellow-500 shadow-[0_0_24px_rgba(217,122,0,0.3)]' : 'border-yellow-700/30'
+                    } bg-[#17181B]`}
                   >
                     {theme.name}
                   </button>
@@ -304,18 +304,18 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
               </div>
             </div>
             <div>
-              <h4 className="font-semibold mb-2 text-emerald-300">Tree Species</h4>
+              <h4 className="font-semibold mb-2 text-[#F9D967]">Tree Species</h4>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {treeSpeciesOptions.map((species) => (
                   <button
                     key={species.key}
                     onClick={() => setTreeSpecies(species.key)}
                     className={`p-3 rounded-lg border text-left ${
-                      treeSpecies === species.key ? 'border-cyan-400 shadow-[0_0_24px_rgba(56,189,248,0.25)]' : 'border-gray-700'
-                    } bg-gray-800`}
+                      treeSpecies === species.key ? 'border-yellow-500 shadow-[0_0_24px_rgba(217,122,0,0.3)]' : 'border-yellow-700/30'
+                    } bg-[#17181B]`}
                   >
-                    <div className="font-semibold text-cyan-100">{species.name}</div>
-                    <div className="text-xs text-gray-300 mt-1">{species.description}</div>
+                    <div className="font-semibold text-[#FEEA96]">{species.name}</div>
+                    <div className="text-xs text-amber-100/65 mt-1">{species.description}</div>
                   </button>
                 ))}
               </div>
@@ -325,13 +325,13 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
 
         {currentStep.id === 'done' && (
           <div className="text-center space-y-2">
-            <CheckCircleIcon className="h-16 w-16 text-emerald-400 mx-auto" />
+            <CheckCircleIcon className="h-16 w-16 text-[#FEEA96] mx-auto" />
             <p>Your tree is configured. Keep stages active so leaves stay vibrant.</p>
           </div>
         )}
       </div>
 
-      <div className="mt-6 pt-4 border-t border-gray-700">
+      <div className="mt-6 pt-4 border-t border-yellow-700/25">
         <Button onClick={goNext} variant="primary" className="w-full" size="lg" disabled={isContinueDisabled}>
           {currentStepIndex === ONBOARDING_STEPS_CONFIG.length - 1 ? 'Open Tree' : 'Continue'}
           <ChevronRightIcon className="h-5 w-5 ml-2" />

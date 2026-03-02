@@ -23,7 +23,7 @@ const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) => {
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Privacy and Safety Controls">
       <div className="space-y-5 text-sm">
-        <p className="text-gray-300">
+        <p className="text-amber-100/85">
           Productivitree is configured for privacy-first local mode. Your core data is stored in your browser unless you explicitly
           choose AI reflection.
         </p>
@@ -71,8 +71,8 @@ const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) => {
             Delete All Data
           </Button>
         </div>
-        {copyStatus && <p className="text-emerald-300">{copyStatus}</p>}
-        <a href={TESTER_FEEDBACK_URL} target="_blank" rel="noreferrer" className="text-sky-300 underline">
+        {copyStatus && <p className="text-[#FEEA96]">{copyStatus}</p>}
+        <a href={TESTER_FEEDBACK_URL} target="_blank" rel="noreferrer" className="text-[#F9D967] underline decoration-[#D97A00] hover:text-[#FEEA96]">
           Send Beta Feedback
         </a>
       </div>

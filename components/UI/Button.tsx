@@ -16,13 +16,13 @@ export const Button: React.FC<ButtonProps> = ({
   className = '',
   ...props
 }) => {
-  const baseStyle = "font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all duration-150 ease-in-out inline-flex items-center justify-center";
+  const baseStyle = "font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black transition-all duration-150 ease-in-out inline-flex items-center justify-center";
   
   const variantStyles = {
-    primary: 'bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500 disabled:bg-blue-400',
-    secondary: 'bg-gray-600 hover:bg-gray-700 text-white focus:ring-gray-500 disabled:bg-gray-400',
-    danger: 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500 disabled:bg-red-400',
-    ghost: 'bg-transparent hover:bg-gray-700/50 text-gray-200 focus:ring-gray-500 disabled:text-gray-400',
+    primary: 'bg-gradient-to-r from-[#D97A00] to-[#F9D967] text-black hover:brightness-110 focus:ring-yellow-500 disabled:opacity-65',
+    secondary: 'bg-[#181A1D] hover:bg-[#1F2125] text-[#FEEA96] border border-yellow-700/30 focus:ring-yellow-700 disabled:opacity-65',
+    danger: 'bg-[#5A1E1A] hover:bg-[#6D2320] text-[#FEEA96] border border-red-700/45 focus:ring-red-700 disabled:opacity-65',
+    ghost: 'bg-transparent hover:bg-yellow-500/10 text-[#F9D967] border border-transparent hover:border-yellow-700/30 focus:ring-yellow-700 disabled:text-[#A59765]',
   };
 
   const sizeStyles = {

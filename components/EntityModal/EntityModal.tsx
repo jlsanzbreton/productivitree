@@ -101,25 +101,25 @@ const EntityModal: React.FC<EntityModalProps> = ({ isOpen, node, onClose }) => {
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={titleByType}>
       <div className="space-y-4">
-        <label className="block text-sm text-gray-300">
+        <label className="block text-sm text-amber-100/90">
           Title
           <input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            className="mt-1 w-full p-2 rounded-md bg-gray-700 border border-gray-600"
+            className="mt-1 w-full p-2 rounded-md bg-[#1A1C1F] border border-yellow-700/30 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 text-[#FCEFC6]"
           />
         </label>
-        <label className="block text-sm text-gray-300">
+        <label className="block text-sm text-amber-100/90">
           Description
           <textarea
             value={description}
             onChange={(event) => setDescription(event.target.value)}
             rows={3}
-            className="mt-1 w-full p-2 rounded-md bg-gray-700 border border-gray-600"
+            className="mt-1 w-full p-2 rounded-md bg-[#1A1C1F] border border-yellow-700/30 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 text-[#FCEFC6]"
           />
         </label>
         {node.type === 'root' && (
-          <label className="block text-sm text-gray-300">
+          <label className="block text-sm text-amber-100/90">
             Strength (1-10)
             <input
               type="number"
@@ -127,13 +127,13 @@ const EntityModal: React.FC<EntityModalProps> = ({ isOpen, node, onClose }) => {
               max={10}
               value={strengthLevel}
               onChange={(event) => setStrengthLevel(Number(event.target.value))}
-              className="mt-1 w-full p-2 rounded-md bg-gray-700 border border-gray-600"
+              className="mt-1 w-full p-2 rounded-md bg-[#1A1C1F] border border-yellow-700/30 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 text-[#FCEFC6]"
             />
           </label>
         )}
         {node.type === 'trunk' && (
           <>
-            <label className="block text-sm text-gray-300">
+            <label className="block text-sm text-amber-100/90">
               Proficiency (1-10)
               <input
                 type="number"
@@ -141,10 +141,10 @@ const EntityModal: React.FC<EntityModalProps> = ({ isOpen, node, onClose }) => {
                 max={10}
                 value={proficiencyLevel}
                 onChange={(event) => setProficiencyLevel(Number(event.target.value))}
-                className="mt-1 w-full p-2 rounded-md bg-gray-700 border border-gray-600"
+                className="mt-1 w-full p-2 rounded-md bg-[#1A1C1F] border border-yellow-700/30 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 text-[#FCEFC6]"
               />
             </label>
-            <label className="block text-sm text-gray-300">
+            <label className="block text-sm text-amber-100/90">
               Years of experience
               <input
                 type="number"
@@ -152,14 +152,14 @@ const EntityModal: React.FC<EntityModalProps> = ({ isOpen, node, onClose }) => {
                 max={60}
                 value={yearsOfExperience}
                 onChange={(event) => setYearsOfExperience(Number(event.target.value))}
-                className="mt-1 w-full p-2 rounded-md bg-gray-700 border border-gray-600"
+                className="mt-1 w-full p-2 rounded-md bg-[#1A1C1F] border border-yellow-700/30 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 text-[#FCEFC6]"
               />
             </label>
           </>
         )}
         {node.type === 'branch' && (
           <>
-            <label className="block text-sm text-gray-300">
+            <label className="block text-sm text-amber-100/90">
               Priority (1-5)
               <input
                 type="number"
@@ -167,15 +167,15 @@ const EntityModal: React.FC<EntityModalProps> = ({ isOpen, node, onClose }) => {
                 max={5}
                 value={priorityLevel}
                 onChange={(event) => setPriorityLevel(Number(event.target.value))}
-                className="mt-1 w-full p-2 rounded-md bg-gray-700 border border-gray-600"
+                className="mt-1 w-full p-2 rounded-md bg-[#1A1C1F] border border-yellow-700/30 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 text-[#FCEFC6]"
               />
             </label>
-            <label className="block text-sm text-gray-300">
+            <label className="block text-sm text-amber-100/90">
               Status
               <select
                 value={status}
                 onChange={(event) => setStatus(event.target.value as ProjectBranchStatus)}
-                className="mt-1 w-full p-2 rounded-md bg-gray-700 border border-gray-600"
+                className="mt-1 w-full p-2 rounded-md bg-[#1A1C1F] border border-yellow-700/30 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 text-[#FCEFC6]"
               >
                 <option value="active">Active</option>
                 <option value="paused">Paused</option>

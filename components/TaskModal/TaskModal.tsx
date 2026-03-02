@@ -79,7 +79,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, task }) => {
     <Modal isOpen={isOpen} onClose={onClose} title={task ? 'Edit Task' : 'Add New Task'}>
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
-          <label htmlFor="title" className="block text-sm font-medium text-gray-300 mb-1">
+          <label htmlFor="title" className="block text-sm font-medium text-amber-100/90 mb-1">
             Title <span className="text-red-500">*</span>
           </label>
           <input
@@ -88,13 +88,13 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, task }) => {
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             required
-            className="w-full p-2.5 bg-gray-700 border border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400 text-white"
+            className="w-full p-2.5 bg-[#1A1C1F] border border-yellow-700/30 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 placeholder-yellow-200/30 text-[#FCEFC6]"
             placeholder="e.g., Water the virtual plant"
           />
         </div>
 
         <div>
-          <label htmlFor="description" className="block text-sm font-medium text-gray-300 mb-1">
+          <label htmlFor="description" className="block text-sm font-medium text-amber-100/90 mb-1">
             Description
           </label>
           <textarea
@@ -102,21 +102,21 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, task }) => {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
-            className="w-full p-2.5 bg-gray-700 border border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400 text-white"
+            className="w-full p-2.5 bg-[#1A1C1F] border border-yellow-700/30 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 placeholder-yellow-200/30 text-[#FCEFC6]"
             placeholder="Add more details about the task..."
           />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           <div>
-            <label htmlFor="project" className="block text-sm font-medium text-gray-300 mb-1">
+            <label htmlFor="project" className="block text-sm font-medium text-amber-100/90 mb-1">
               Project Branch
             </label>
             <select
               id="project"
               value={projectId}
               onChange={(e) => setProjectId(e.target.value)}
-              className="w-full p-2.5 bg-gray-700 border border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-white"
+              className="w-full p-2.5 bg-[#1A1C1F] border border-yellow-700/30 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 text-[#FCEFC6]"
             >
               {projects.length === 0 && <option value="">Create a project first</option>}
               {projects.map((project) => (
@@ -127,27 +127,27 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, task }) => {
             </select>
           </div>
           <div>
-            <label htmlFor="priority" className="block text-sm font-medium text-gray-300 mb-1">
+            <label htmlFor="priority" className="block text-sm font-medium text-amber-100/90 mb-1">
               Priority (1-Low, 5-High)
             </label>
             <select
                 id="priority"
                 value={priority}
                 onChange={(e) => setPriority(Number(e.target.value))}
-                className="w-full p-2.5 bg-gray-700 border border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-white"
+                className="w-full p-2.5 bg-[#1A1C1F] border border-yellow-700/30 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 text-[#FCEFC6]"
             >
                 {[1,2,3,4,5].map(p => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
           <div>
-            <label htmlFor="status" className="block text-sm font-medium text-gray-300 mb-1">
+            <label htmlFor="status" className="block text-sm font-medium text-amber-100/90 mb-1">
               Status
             </label>
             <select
               id="status"
               value={status}
               onChange={(e) => setStatus(e.target.value as LeafStatus)}
-              className="w-full p-2.5 bg-gray-700 border border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-white"
+              className="w-full p-2.5 bg-[#1A1C1F] border border-yellow-700/30 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 text-[#FCEFC6]"
             >
               {Object.values(LeafStatus).map((s) => (
                 <option key={s} value={s} className="capitalize">
@@ -159,7 +159,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, task }) => {
         </div>
         
         <div>
-            <label htmlFor="dueDate" className="block text-sm font-medium text-gray-300 mb-1">
+            <label htmlFor="dueDate" className="block text-sm font-medium text-amber-100/90 mb-1">
                 Due Date (Optional)
             </label>
             <input
@@ -167,12 +167,12 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, task }) => {
                 id="dueDate"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                className="w-full p-2.5 bg-gray-700 border border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-white"
+                className="w-full p-2.5 bg-[#1A1C1F] border border-yellow-700/30 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 text-[#FCEFC6]"
             />
         </div>
 
 
-        <div className="flex flex-col sm:flex-row justify-end space-y-3 sm:space-y-0 sm:space-x-3 pt-4 border-t border-gray-700">
+        <div className="flex flex-col sm:flex-row justify-end space-y-3 sm:space-y-0 sm:space-x-3 pt-4 border-t border-yellow-700/25">
           {task && (
              <Button type="button" variant="danger" onClick={handleDelete} className="w-full sm:w-auto">
                 Delete Task

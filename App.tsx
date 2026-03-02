@@ -8,7 +8,7 @@ import TaskModal from './components/TaskModal/TaskModal';
 import EntityModal from './components/EntityModal/EntityModal';
 import PrivacyModal from './components/Privacy/PrivacyModal';
 import { AppContext, AppContextType } from './contexts/AppContext';
-import { backgroundThemes, visualTokens } from './constants';
+import { backgroundThemes, goldenPalette, visualTokens } from './constants';
 import { TreeNode } from './types';
 
 enum Page {
@@ -70,7 +70,11 @@ const App: React.FC = () => {
   return (
     <div
       className="flex flex-col h-screen antialiased text-slate-100"
-      style={{ background: currentThemeDetails.backgroundGradient, fontFamily: '"Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif' }}
+      style={{
+        background: currentThemeDetails.backgroundGradient,
+        fontFamily: '"Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif',
+        color: '#FCEFC6',
+      }}
     >
       <Header onOpenPrivacy={() => setShowPrivacyModal(true)} />
       <main className="flex-grow flex flex-col items-center justify-center p-4 pb-28 sm:pb-32 overflow-hidden relative">
@@ -79,7 +83,7 @@ const App: React.FC = () => {
             className="w-full h-full"
             style={{
               background:
-                'radial-gradient(circle at 8% 14%, rgba(56, 229, 169, 0.2), transparent 32%), radial-gradient(circle at 78% 8%, rgba(75, 163, 255, 0.16), transparent 36%), radial-gradient(circle at 54% 88%, rgba(162, 72, 255, 0.1), transparent 38%)',
+                'radial-gradient(circle at 12% 12%, rgba(217,122,0,0.2), transparent 34%), radial-gradient(circle at 84% 8%, rgba(254,234,150,0.12), transparent 38%), radial-gradient(circle at 52% 88%, rgba(184,132,42,0.12), transparent 42%)',
             }}
           />
         </div>
@@ -88,14 +92,14 @@ const App: React.FC = () => {
             className="w-full h-full"
             style={{
               background:
-                'linear-gradient(110deg, rgba(15, 23, 42, 0.92) 0%, rgba(2, 6, 23, 0.78) 40%, rgba(8, 47, 73, 0.58) 100%)',
+                'linear-gradient(112deg, rgba(18,18,20,0.92) 0%, rgba(11,12,14,0.84) 42%, rgba(8,8,9,0.7) 100%)',
             }}
           />
         </div>
         {error && (
           <div
-            className="absolute top-2 right-2 z-30 text-xs rounded-md px-3 py-2 border shadow-[0_0_20px_rgba(249,115,22,0.25)]"
-            style={{ background: visualTokens.panelSurface, borderColor: '#f97316', color: visualTokens.panelText }}
+            className="absolute top-2 right-2 z-30 text-xs rounded-md px-3 py-2 border shadow-[0_0_20px_rgba(217,122,0,0.26)]"
+            style={{ background: visualTokens.panelSurface, borderColor: goldenPalette.mediumGold, color: visualTokens.panelText }}
           >
             {error}
           </div>
