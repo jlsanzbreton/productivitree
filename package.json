@@ -14,6 +14,7 @@
     "check": "npm run lint && npm run typecheck && npm run test && npm run test:integration"
   },
   "dependencies": {
+    "@clerk/clerk-react": "^5.32.0",
     "dexie": "^4.0.10",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
