@@ -8,9 +8,21 @@ import TaskModal from './components/TaskModal/TaskModal';
 import EntityModal from './components/EntityModal/EntityModal';
 import GrowthEntityModal, { GrowthEntityType } from './components/Growth/GrowthEntityModal';
 import PrivacyModal from './components/Privacy/PrivacyModal';
+import ProjectListView from './components/ProjectList/ProjectListView';
 import { AppContext, AppContextType } from './contexts/AppContext';
 import { backgroundThemes, goldenPalette, visualTokens } from './constants';
-import { TreeNode } from './types';
+import { ProjectBranch, TreeNode } from './types';
+
+type TreeViewMode = 'tree' | 'list';
+const VIEW_MODE_STORAGE_KEY = 'productivitree-view-mode';
+
+const readStoredViewMode = (): TreeViewMode => {
+  try {
+    return window.localStorage.getItem(VIEW_MODE_STORAGE_KEY) === 'list' ? 'list' : 'tree';
+  } catch (_error) {
+    return 'tree';
+  }
+};
 
 enum Page {
   Tree,
@@ -40,6 +52,20 @@ const App: React.FC = () => {
   const [selectedEntityNode, setSelectedEntityNode] = useState<TreeNode | null>(null);
   const [waterPulse, setWaterPulse] = useState(0);
   const [growthEntityType, setGrowthEntityType] = useState<GrowthEntityType | null>(null);
+  const [viewMode, setViewMode] = useState<TreeViewMode>(readStoredViewMode);
+
+  const changeViewMode = (mode: TreeViewMode) => {
+    setViewMode(mode);
+    try {
+      window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
+    } catch (_error) {
+      // Storage unavailable: the choice just won't be remembered.
+    }
+  };
+
+  const handleProjectSelect = (project: ProjectBranch) => {
+    setSelectedEntityNode({ id: project.id, parentId: 'trunk-hub', type: 'branch', data: project, children: [] });
+  };
 
   useEffect(() => {
     if (!isOnboardingComplete) {
@@ -118,8 +144,32 @@ const App: React.FC = () => {
         )}
 
         {currentPage === Page.Tree && isOnboardingComplete && (
-          <div className="relative z-10 w-full h-full min-h-0">
-            <TreeVisualizationCanvas treeData={treeData} onNodeClick={handleNodeClick} treeSpecies={treeSpecies} waterPulse={waterPulse} />
+          <div className="relative z-10 w-full h-full min-h-0 flex flex-col gap-3">
+            <div
+              role="group"
+              aria-label="Cambiar vista"
+              className="self-center inline-flex rounded-full border border-yellow-700/40 bg-black/45 backdrop-blur-xl p-1"
+            >
+              {(['tree', 'list'] as TreeViewMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => changeViewMode(mode)}
+                  aria-pressed={viewMode === mode}
+                  className={`min-h-8 px-4 py-1 rounded-full text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-500/60 ${
+                    viewMode === mode ? 'bg-gradient-to-r from-[#D97A00] to-[#F9D967] text-black font-semibold' : 'text-[#FEEA96] hover:bg-yellow-500/10'
+                  }`}
+                >
+                  {mode === 'tree' ? 'Árbol' : 'Lista'}
+                </button>
+              ))}
+            </div>
+            <div className="flex-1 min-h-0">
+              {viewMode === 'tree' ? (
+                <TreeVisualizationCanvas treeData={treeData} onNodeClick={handleNodeClick} treeSpecies={treeSpecies} waterPulse={waterPulse} />
+              ) : (
+                <ProjectListView onSelectProject={handleProjectSelect} />
+              )}
+            </div>
           </div>
         )}
 
