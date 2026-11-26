@@ -1,7 +1,12 @@
 import React, { useContext, useEffect, useState } from 'react';
 import Header from './components/Layout/Header';
 import Footer from './components/Layout/Footer';
-import TreeVisualizationCanvas from './components/TreeVisualization/TreeVisualizationCanvas';
+import LivingTreeView from './components/LivingTree/LivingTreeView';
+import ArchiveView from './components/LivingTree/ArchiveView';
+import TreeDataDialog from './components/LivingTree/TreeDataDialog';
+import ConnectAppsWizard from './components/LivingTree/ConnectAppsWizard';
+import { SproutTarget } from './components/LivingTree/SproutDialog';
+import { parseActivityParams } from './utils/activityLink';
 import PassionTest from './components/PassionTest/PassionTest';
 import OnboardingFlow from './components/Onboarding/OnboardingFlow';
 import TaskModal from './components/TaskModal/TaskModal';
@@ -13,12 +18,13 @@ import { AppContext, AppContextType } from './contexts/AppContext';
 import { backgroundThemes, goldenPalette, visualTokens } from './constants';
 import { ProjectBranch, TreeNode } from './types';
 
-type TreeViewMode = 'tree' | 'list';
+type TreeViewMode = 'tree' | 'list' | 'archive';
 const VIEW_MODE_STORAGE_KEY = 'productivitree-view-mode';
 
 const readStoredViewMode = (): TreeViewMode => {
   try {
-    return window.localStorage.getItem(VIEW_MODE_STORAGE_KEY) === 'list' ? 'list' : 'tree';
+    const stored = window.localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+    return stored === 'list' || stored === 'archive' ? stored : 'tree';
   } catch (_error) {
     return 'tree';
   }
@@ -36,21 +42,23 @@ const App: React.FC = () => {
     setShowPassionTest,
     isOnboardingComplete,
     activeBackground,
-    treeSpecies,
-    currentTasks,
-    treeData,
     waterTree,
     showTaskModal,
     setShowTaskModal,
     editingTask,
     setEditingTask,
     error,
+    recordExternalActivity,
   } = useContext(AppContext) as AppContextType;
 
   const [currentPage, setCurrentPage] = useState<Page>(() => (isOnboardingComplete ? Page.Tree : Page.Onboarding));
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [selectedEntityNode, setSelectedEntityNode] = useState<TreeNode | null>(null);
-  const [waterPulse, setWaterPulse] = useState(0);
+  const [showDataDialog, setShowDataDialog] = useState(false);
+  const [showConnect, setShowConnect] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [focusRequest, setFocusRequest] = useState<{ projectId: string; taskId?: string; nonce: number } | null>(null);
+  const [sproutRequest, setSproutRequest] = useState<{ target: SproutTarget; nonce: number } | null>(null);
   const [growthEntityType, setGrowthEntityType] = useState<GrowthEntityType | null>(null);
   const [viewMode, setViewMode] = useState<TreeViewMode>(readStoredViewMode);
 
@@ -67,6 +75,35 @@ const App: React.FC = () => {
     setSelectedEntityNode({ id: project.id, parentId: 'trunk-hub', type: 'branch', data: project, children: [] });
   };
 
+  // Activity links (?actividad=1&rama=…&tarea=…) sent by shortcuts or connected apps.
+  useEffect(() => {
+    const activity = parseActivityParams(window.location.search);
+    if (!activity) return;
+    window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+    if ('error' in activity) {
+      setToast(activity.error || 'Enlace de actividad no válido.');
+      return;
+    }
+    const result = recordExternalActivity(activity);
+    setToast(result.message);
+    if (result.ok && result.projectId) {
+      changeViewMode('tree');
+      setFocusRequest({ projectId: result.projectId, taskId: result.taskId, nonce: Date.now() });
+    }
+    // Runs once on load.
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timer = window.setTimeout(() => setToast(null), 4200);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  const sproutFromFooter = (target: SproutTarget) => {
+    changeViewMode('tree');
+    setSproutRequest({ target, nonce: Date.now() });
+  };
+
   useEffect(() => {
     if (!isOnboardingComplete) {
       setCurrentPage(Page.Onboarding);
@@ -76,19 +113,6 @@ const App: React.FC = () => {
   }, [isOnboardingComplete, showPassionTest]);
 
   const currentThemeDetails = backgroundThemes[activeBackground] || backgroundThemes.forest_glow;
-
-  const handleNodeClick = (node: TreeNode) => {
-    if (node.type === 'leaf') {
-      const taskToEdit = currentTasks.find((task) => task.id === node.id);
-      setEditingTask(taskToEdit || null);
-      setShowTaskModal(true);
-      return;
-    }
-
-    if (node.type === 'root' || node.type === 'trunk' || node.type === 'branch') {
-      setSelectedEntityNode(node);
-    }
-  };
 
   const handleTaskModalClose = () => {
     setShowTaskModal(false);
@@ -150,7 +174,7 @@ const App: React.FC = () => {
               aria-label="Cambiar vista"
               className="self-center inline-flex rounded-full border border-yellow-700/40 bg-black/45 backdrop-blur-xl p-1"
             >
-              {(['tree', 'list'] as TreeViewMode[]).map((mode) => (
+              {(['tree', 'list', 'archive'] as TreeViewMode[]).map((mode) => (
                 <button
                   key={mode}
                   onClick={() => changeViewMode(mode)}
@@ -159,15 +183,30 @@ const App: React.FC = () => {
                     viewMode === mode ? 'bg-gradient-to-r from-[#D97A00] to-[#F9D967] text-black font-semibold' : 'text-[#FEEA96] hover:bg-yellow-500/10'
                   }`}
                 >
-                  {mode === 'tree' ? 'Árbol' : 'Lista'}
+                  {mode === 'tree' ? 'Árbol' : mode === 'list' ? 'Lista' : 'Archivo'}
                 </button>
               ))}
             </div>
             <div className="flex-1 min-h-0">
-              {viewMode === 'tree' ? (
-                <TreeVisualizationCanvas treeData={treeData} onNodeClick={handleNodeClick} treeSpecies={treeSpecies} waterPulse={waterPulse} />
-              ) : (
-                <ProjectListView onSelectProject={handleProjectSelect} />
+              {viewMode === 'tree' && (
+                <LivingTreeView
+                  onEditBranch={handleProjectSelect}
+                  onOpenArchive={() => changeViewMode('archive')}
+                  onOpenData={() => setShowDataDialog(true)}
+                  onOpenConnect={() => setShowConnect(true)}
+                  focusRequest={focusRequest}
+                  sproutRequest={sproutRequest}
+                />
+              )}
+              {viewMode === 'list' && <ProjectListView onSelectProject={handleProjectSelect} />}
+              {viewMode === 'archive' && (
+                <ArchiveView
+                  onBack={() => changeViewMode('tree')}
+                  onShowBranch={(projectId) => {
+                    changeViewMode('tree');
+                    setFocusRequest({ projectId, nonce: Date.now() });
+                  }}
+                />
               )}
             </div>
           </div>
@@ -185,21 +224,21 @@ const App: React.FC = () => {
         )}
 
         <PrivacyModal isOpen={showPrivacyModal} onClose={() => setShowPrivacyModal(false)} />
+        <TreeDataDialog isOpen={showDataDialog} onClose={() => setShowDataDialog(false)} />
+        <ConnectAppsWizard isOpen={showConnect} onClose={() => setShowConnect(false)} />
+        {toast && (
+          <div className="lt-toast" role="status">
+            {toast}
+          </div>
+        )}
       </main>
       {isOnboardingComplete && (
         <Footer
-          onWater={() => {
-            waterTree();
-            setWaterPulse((prev) => prev + 1);
-          }}
+          onWater={() => waterTree()}
           onAddRoot={() => setGrowthEntityType('root')}
           onAddTrunk={() => setGrowthEntityType('trunk')}
-          onAddProject={() => setGrowthEntityType('branch')}
-          onAddTask={() => {
-            setGrowthEntityType(null);
-            setEditingTask(null);
-            setShowTaskModal(true);
-          }}
+          onAddProject={() => sproutFromFooter({ kind: 'branch' })}
+          onAddTask={() => sproutFromFooter({ kind: 'leaf', projectId: '' })}
         />
       )}
     </div>

@@ -37,6 +37,8 @@ export const buildDefaultPersistedState = (defaults) => ({
   passionTestResult: defaults.passionTestResult,
   consent: defaults.consent,
   privacy: defaults.privacy,
+  connections: defaults.connections || [],
+  history: defaults.history || [],
 });
 
 export const migrateLegacyStorage = (defaults) => {

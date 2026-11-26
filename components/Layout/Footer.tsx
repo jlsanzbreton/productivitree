@@ -48,10 +48,10 @@ const Footer: React.FC<FooterProps> = ({ onWater, onAddRoot, onAddTrunk, onAddPr
   }, []);
 
   const speedDialActions: Array<{ id: string; label: string; onClick: () => void }> = [
-    { id: 'root', label: 'Añadir Propósito (Raíz)', onClick: onAddRoot },
-    { id: 'trunk', label: 'Añadir Habilidad (Tronco)', onClick: onAddTrunk },
-    { id: 'branch', label: 'Añadir Proyecto (Rama)', onClick: onAddProject },
-    { id: 'leaf', label: 'Añadir Tarea (Hoja)', onClick: onAddTask },
+    { id: 'root', label: 'Añadir pasión (raíz)', onClick: onAddRoot },
+    { id: 'trunk', label: 'Añadir experiencia (tronco)', onClick: onAddTrunk },
+    { id: 'branch', label: 'Brotar una rama (proyecto)', onClick: onAddProject },
+    { id: 'leaf', label: 'Brotar una hoja (tarea)', onClick: onAddTask },
   ];
 
   return (

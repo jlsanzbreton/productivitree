@@ -5,12 +5,14 @@ import PassionTest from '../PassionTest/PassionTest';
 import { Button } from '../UI/Button';
 import { CheckCircleIcon, ChevronRightIcon } from '../Icons/HeroIcons';
 import { LeafStatus } from '../../types';
+import TreeDataDialog from '../LivingTree/TreeDataDialog';
 
 type RootInput = { title: string; description: string; strengthLevel: number };
 type TrunkInput = { title: string; description: string; proficiencyLevel: number; yearsOfExperience: number };
 type ProjectInput = { title: string; description: string; priorityLevel: number };
 
 const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
+  const [showImport, setShowImport] = useState(false);
   const {
     setIsOnboardingComplete,
     setShowPassionTest,
@@ -126,6 +128,13 @@ const OnboardingFlow: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
           <div className="text-center space-y-3">
             <p className="text-lg">Roots are your purpose. Trunk is your capability. Branches are your projects. Leaves are your stages.</p>
             <p className="text-amber-100/55">Balanced focus mode avoids pressure loops while keeping attention visible.</p>
+            <p className="text-amber-100/75">
+              ¿Ya tienes tu árbol en un JSON?{' '}
+              <button className="underline text-[#F9D967]" onClick={() => setShowImport(true)}>
+                Impórtalo y sáltate estos pasos
+              </button>
+            </p>
+            <TreeDataDialog isOpen={showImport} onClose={() => setShowImport(false)} />
           </div>
         )}
 
