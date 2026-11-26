@@ -73,6 +73,11 @@ export function createLivingTree(cv, opts) {
   let selFruit = null;
   let selTrunk = null;
   let hoverTrunk = null;
+  let hoverRoot = null;
+  let selRoot = null;
+  let hoverSun = false;
+  let hintT = null; // guide hint: 'sun' | 'roots' | 'trunk' | 'branch'
+  let rootPts = [];
   let zoomed = null;
   let settled = true;
   let focusA = 0;
@@ -679,7 +684,7 @@ export function createLivingTree(cv, opts) {
       ctx.lineTo(sx + Math.cos(a + 0.06) * r2, sy + Math.sin(a + 0.06) * r2);
       ctx.stroke();
     }
-    ctx.fillStyle = 'rgba(246,214,92,.35)';
+    ctx.fillStyle = hoverSun ? 'rgba(250,206,70,.55)' : 'rgba(246,214,92,.35)';
     ctx.beginPath();
     ctx.arc(sx, sy, sr, 0, 6.283);
     ctx.fill();
@@ -708,6 +713,7 @@ export function createLivingTree(cv, opts) {
     ctx.stroke();
     // roots = passions, names written along them
     const n = model.roots.length;
+    rootPts = [];
     model.roots.forEach((r, i) => {
       const u0 = n === 1 ? 0.5 : i / (n - 1);
       const ex = 100 + 800 * u0;
@@ -727,7 +733,19 @@ export function createLivingTree(cv, opts) {
           iu * iu * iu * by + 3 * iu * iu * u * c1y + 3 * iu * u * u * c2y + u * u * u * ey,
         ]);
       }
+      rootPts.push(pts);
       ctx.lineCap = 'round';
+      if (hoverRoot === i || selRoot === i) {
+        ctx.save();
+        ctx.shadowColor = selRoot === i ? 'rgba(255,200,90,.95)' : 'rgba(255,230,170,.9)';
+        ctx.shadowBlur = 14;
+        ctx.strokeStyle = selRoot === i ? 'rgba(255,214,110,.55)' : 'rgba(255,240,200,.5)';
+        ctx.beginPath();
+        pts.forEach(([x, y], j) => (j ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+        ctx.lineWidth = 18;
+        ctx.stroke();
+        ctx.restore();
+      }
       for (let j = 1; j < pts.length; j++) {
         const u = j / 30;
         ctx.strokeStyle = 'rgba(196,70,58,.85)';
@@ -893,6 +911,38 @@ export function createLivingTree(cv, opts) {
         });
     }
     flushLabels();
+    drawHint(time);
+  }
+
+  function drawHint(time) {
+    if (!hintT || zoomed) return;
+    let cx;
+    let cy;
+    let rx;
+    let ry;
+    if (hintT === 'sun') [cx, cy, rx, ry] = [CX, 46, 70, 62];
+    else if (hintT === 'roots') {
+      if (!rootPts.length) return;
+      [cx, cy, rx, ry] = [CX, GY + 62, 430, 70];
+    } else if (hintT === 'trunk') {
+      const top = trunkAt(BAND0 + Math.max(1, model.trunk.length) * BAND);
+      [cx, cy, rx, ry] = [CX, (GY + top.y) / 2, 70, (GY - top.y) / 2 + 22];
+    } else if (hintT === 'branch') {
+      const p = P[0];
+      if (!p || !p.bbox) return;
+      const [a, b, c, d] = p.bbox;
+      [cx, cy, rx, ry] = [(a + c) / 2, (b + d) / 2, (c - a) / 2 + 24, (d - b) / 2 + 24];
+    } else return;
+    const pulse = reduce ? 0.5 : 0.5 + 0.5 * Math.sin(time / 380);
+    ctx.save();
+    ctx.setLineDash([7, 7]);
+    ctx.lineDashOffset = reduce ? 0 : -time / 60;
+    ctx.strokeStyle = `rgba(214,150,30,${0.55 + 0.35 * pulse})`;
+    ctx.lineWidth = 2.2 + pulse;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx + pulse * 4, ry + pulse * 4, 0, 0, 6.283);
+    ctx.stroke();
+    ctx.restore();
   }
 
   // ---------- camera & loop
@@ -1022,6 +1072,29 @@ export function createLivingTree(cv, opts) {
     }
     return best;
   }
+  function pickSun(x, y) {
+    return Math.hypot(x - CX, y - 46) < 48;
+  }
+  function pickRoot(x, y) {
+    if (y < GY) return null;
+    let best = null;
+    let bd = 13;
+    rootPts.forEach((pts, i) => {
+      for (let j = 1; j < pts.length; j += 1) {
+        const [ax, ay] = pts[j - 1];
+        const [bx, by] = pts[j];
+        const dx = bx - ax;
+        const dy = by - ay;
+        const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1)));
+        const dd = Math.hypot(x - ax - dx * t, y - ay - dy * t) - 5 * (1 - j / 30);
+        if (dd < bd) {
+          bd = dd;
+          best = i;
+        }
+      }
+    });
+    return best;
+  }
   function pickTrunk(x, y) {
     const n = model.trunk.length;
     if (!n) return null;
@@ -1044,19 +1117,26 @@ export function createLivingTree(cv, opts) {
     const lf = fu ? null : pickLeaf(x, y);
     const br = fu ? fu[0] : lf ? lf[0] : pickBranch(x, y);
     const tk = fu || lf || br ? null : pickTrunk(x, y);
+    const rt = fu || lf || br || tk !== null || zoomed ? null : pickRoot(x, y);
+    const sn = !(fu || lf || br || tk !== null || rt !== null || zoomed) && pickSun(x, y);
     hoverLeaf = lf ? lf[1].id : null;
     hover = br ? br.id : null;
-    if (tk !== hoverTrunk) {
+    if (tk !== hoverTrunk || rt !== hoverRoot || sn !== hoverSun) {
       hoverTrunk = tk;
+      hoverRoot = rt;
+      hoverSun = sn;
       bgKey = '';
     }
-    cv.style.cursor = fu || lf || br || tk !== null ? 'pointer' : 'default';
+    const any = fu || lf || br || tk !== null || rt !== null || sn;
+    cv.style.cursor = any ? 'pointer' : 'default';
     if (!tipEl) return;
     if (fu) tipEl.innerHTML = `<b>${esc(fu[1].n)}</b>Fruto · ${fu[1].done ? 'cosechado' : 'madurando'} · clic para abrirlo`;
     else if (lf) tipEl.innerHTML = `<b>${esc(lf[1].n)}</b>${esc(lf[0].name)} · ${leafStateLabel(lf[1])}${lf[1].done ? '' : ' · ' + ago(lf[1].d)}`;
     else if (br) tipEl.innerHTML = `<b>${esc(br.name)}</b>${br.paused ? 'En pausa' : 'Rama'} · ${br.tasks.filter((t) => !t.done).length} tareas abiertas`;
     else if (tk !== null) tipEl.innerHTML = `<b>${esc(model.trunk[tk].filter(Boolean).join(' '))}</b>Experiencia · clic para verla y añadir contexto`;
-    tipEl.hidden = !(fu || lf || br || tk !== null);
+    else if (rt !== null) tipEl.innerHTML = `<b>${esc(model.roots[rt])}</b>Pasión · clic para verla y cambiarla`;
+    else if (sn) tipEl.innerHTML = `<b>${esc(model.purpose || 'Tu propósito')}</b>El sol es tu propósito · clic para ${model.purpose ? 'cambiarlo' : 'escribirlo'}`;
+    tipEl.hidden = !any;
     tipEl.style.left = mx + 'px';
     tipEl.style.top = my + 'px';
   }
@@ -1064,6 +1144,9 @@ export function createLivingTree(cv, opts) {
     hover = null;
     hoverLeaf = null;
     hoverTrunk = null;
+    hoverRoot = null;
+    hoverSun = false;
+    bgKey = '';
     if (tipEl) tipEl.hidden = true;
   }
   function onClick(e) {
@@ -1093,6 +1176,17 @@ export function createLivingTree(cv, opts) {
       if (opts.onTrunk) opts.onTrunk(tk);
       return;
     }
+    if (!zoomed) {
+      const rt = pickRoot(x, y);
+      if (rt !== null) {
+        if (opts.onRoot) opts.onRoot(rt);
+        return;
+      }
+      if (pickSun(x, y)) {
+        if (opts.onSun) opts.onSun();
+        return;
+      }
+    }
     if (zoomed) {
       zoomTo(null);
       if (opts.onBackground) opts.onBackground();
@@ -1116,7 +1210,11 @@ export function createLivingTree(cv, opts) {
       rightInset = next;
       if (zoomed) zoomTo(zoomed);
     },
-    select({ branchId = null, leafId = null, fruitId = null, trunkIndex = null } = {}) {
+    setHint(target) {
+      hintT = target || null;
+    },
+    select({ branchId = null, leafId = null, fruitId = null, trunkIndex = null, rootIndex = null } = {}) {
+      selRoot = rootIndex;
       selBranch = branchId;
       selLeaf = leafId;
       selFruit = fruitId;

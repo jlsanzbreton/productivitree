@@ -8,23 +8,30 @@ import { buildLivingTreeModel, isFruit } from '../../utils/livingTreeModel';
 import { createLivingTree } from './livingTreeEngine';
 import TaskBench from './TaskBench';
 import SproutDialog, { SproutResult, SproutTarget } from './SproutDialog';
+import TreeGuide, { GuideStepId } from './TreeGuide';
+import type { GuideHint } from './livingTreeEngine';
+import { guideProgress, leftoverExample, ExampleSnapshot } from '../../utils/exampleGuide';
 import { ago, branchState, continueUrl, daysSince, isDone, leafState, openExternal } from './treeHelpers';
 
 type Engine = ReturnType<typeof createLivingTree>;
-type Panel = 'overview' | 'branch' | 'fruit' | 'experience';
+type Panel = 'overview' | 'branch' | 'fruit' | 'experience' | 'passion';
+export type GuideState = { step: GuideStepId; snap: ExampleSnapshot | null };
 
 interface LivingTreeViewProps {
-  onEditBranch: (project: ProjectBranch) => void;
   onOpenArchive: () => void;
-  onOpenData: () => void;
+  onOpenData: (text?: string) => void;
+  onOpenPassionTest: () => void;
+  guide: GuideState | null;
+  onGuide: (guide: GuideState | null) => void;
   onOpenConnect: () => void;
   focusRequest?: { projectId: string; taskId?: string; nonce: number } | null;
   sproutRequest?: { target: SproutTarget; nonce: number } | null;
 }
 
-const LivingTreeView: React.FC<LivingTreeViewProps> = ({ onEditBranch, onOpenArchive, onOpenData, onOpenConnect, focusRequest, sproutRequest }) => {
+const LivingTreeView: React.FC<LivingTreeViewProps> = ({ onOpenArchive, onOpenData, onOpenPassionTest, guide, onGuide, onOpenConnect, focusRequest, sproutRequest }) => {
   const ctx = useContext(AppContext) as AppContextType;
   const { projects, currentTasks, achievements, roots, trunkSegments, purpose, setPurpose, connections, setBranchStatus, archiveItem, setFruitHarvested, updateFruit, updateTrunkSegment } = ctx;
+  const { updateCoreRoot, deleteCoreRoot, deleteTrunkSegment, removeExampleParts } = ctx;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const figRef = useRef<HTMLDivElement>(null);
@@ -43,6 +50,11 @@ const LivingTreeView: React.FC<LivingTreeViewProps> = ({ onEditBranch, onOpenArc
   const [tick, setTick] = useState(0);
   const [expId, setExpId] = useState<string | null>(null);
   const [expDraft, setExpDraft] = useState('');
+  const [rootSel, setRootSel] = useState<string | null>(null);
+  const [rootDraft, setRootDraft] = useState('');
+  const [titleDraft, setTitleDraft] = useState('');
+  const [benchSeen, setBenchSeen] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const modelRef = useRef<ReturnType<typeof buildLivingTreeModel> | null>(null);
 
   // Closed branches leave the tree (they live in the archive); paused ones stay, greyed.
@@ -95,6 +107,18 @@ const LivingTreeView: React.FC<LivingTreeViewProps> = ({ onEditBranch, onOpenArc
         setPanel('experience');
         setBenchOpen(false);
       },
+      onRoot: (index: number) => {
+        const id = modelRef.current?.rootIds[index];
+        if (!id) return;
+        setRootSel(id);
+        setPanel('passion');
+        setBenchOpen(false);
+      },
+      onSun: () => {
+        setPanel('overview');
+        setBenchOpen(false);
+        setEditingPurpose(true);
+      },
     });
     engineRef.current = engine;
     return () => {
@@ -110,13 +134,44 @@ const LivingTreeView: React.FC<LivingTreeViewProps> = ({ onEditBranch, onOpenArc
 
   useEffect(() => {
     const trunkIndex = panel === 'experience' && expId ? model.trunkIds.indexOf(expId) : -1;
+    const rootIndex = panel === 'passion' && rootSel ? model.rootIds.indexOf(rootSel) : -1;
     engineRef.current?.select({
-      branchId: panel === 'experience' ? null : branchId,
+      branchId: panel === 'branch' || panel === 'fruit' ? branchId : null,
       leafId: benchOpen ? leafId : null,
       fruitId: panel === 'fruit' ? fruitId : null,
       trunkIndex: trunkIndex >= 0 ? trunkIndex : null,
+      rootIndex: rootIndex >= 0 ? rootIndex : null,
     });
-  }, [branchId, leafId, fruitId, panel, benchOpen, expId, model]);
+  }, [branchId, leafId, fruitId, panel, benchOpen, expId, rootSel, model]);
+
+  // ---- first-run guide over the example tree
+  const guideData = { purpose, roots, trunkSegments, projects, stages: currentTasks, connections };
+  const progress = guideProgress(guide?.snap || null, guideData);
+  const leftover = leftoverExample(guide?.snap || null, guideData);
+  useEffect(() => {
+    if (benchOpen) setBenchSeen(true);
+  }, [benchOpen]);
+  const stepDone = guide
+    ? guide.step === 'sun'
+      ? progress.sun
+      : guide.step === 'roots'
+        ? progress.roots
+        : guide.step === 'trunk'
+          ? progress.trunk
+          : guide.step === 'branch'
+            ? progress.branch
+            : guide.step === 'leaf'
+              ? benchSeen
+              : false
+    : false;
+  const setHint = useCallback((hint: GuideHint | null) => engineRef.current?.setHint(hint), []);
+
+  const onDropFile = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) file.text().then((text) => onOpenData(text));
+  };
 
   useEffect(() => {
     if (!focusRequest) return;
@@ -163,7 +218,18 @@ const LivingTreeView: React.FC<LivingTreeViewProps> = ({ onEditBranch, onOpenArc
   }, [panel, project]);
 
   const experience = trunkSegments.find((s) => s.id === expId) || null;
-  useEffect(() => setExpDraft(experience?.description || ''), [experience?.id]);
+  useEffect(() => {
+    setExpDraft(experience?.description || '');
+    if (panel === 'experience') setTitleDraft(experience?.title || '');
+  }, [experience?.id, panel]);
+  const passion = roots.find((r) => r.id === rootSel) || null;
+  useEffect(() => {
+    setRootDraft(passion?.description || '');
+    if (panel === 'passion') setTitleDraft(passion?.title || '');
+  }, [passion?.id, panel]);
+  useEffect(() => {
+    if ((panel === 'passion' && !passion) || (panel === 'experience' && !experience)) setPanel('overview');
+  }, [panel, passion, experience]);
 
   const fruit = achievements.find((a) => a.id === fruitId) || null;
   useEffect(() => setFruitLink(fruit?.link || ''), [fruit?.id]);
@@ -177,6 +243,20 @@ const LivingTreeView: React.FC<LivingTreeViewProps> = ({ onEditBranch, onOpenArc
 
   const onSprouted = (result: SproutResult) => {
     setSprout(null);
+    if (result.kind === 'root') {
+      setRootSel(result.id);
+      setPanel('passion');
+      return;
+    }
+    if (result.kind === 'trunk') {
+      setExpId(result.id);
+      setPanel('experience');
+      return;
+    }
+    if (result.kind === 'branch' && result.edited) {
+      openBranch(result.id);
+      return;
+    }
     if (result.kind === 'branch') {
       // zoom out so the new branch can be seen growing
       engineRef.current?.zoomTo(null);
@@ -198,6 +278,90 @@ const LivingTreeView: React.FC<LivingTreeViewProps> = ({ onEditBranch, onOpenArc
   const savePurpose = () => {
     setPurpose(purposeDraft.trim());
     setEditingPurpose(false);
+  };
+
+  const openExperience = (id: string) => {
+    setExpId(id);
+    setPanel('experience');
+    setBenchOpen(false);
+    if (zoomed) engineRef.current?.zoomTo(null);
+  };
+  const openPassion = (id: string) => {
+    setRootSel(id);
+    setPanel('passion');
+    setBenchOpen(false);
+    if (zoomed) engineRef.current?.zoomTo(null);
+  };
+  const saveTitle = (current: string, save: (title: string) => void) => {
+    const t = titleDraft.trim();
+    if (t && t !== current) save(t);
+    else setTitleDraft(current);
+  };
+
+  const renderPassion = () => {
+    if (!passion) return null;
+    const fed = projects.filter((p) => p.rootId === passion.id && !p.deletedAt);
+    return (
+      <>
+        <p className="lt-crumb">
+          <button className="lt-link" onClick={() => setPanel('overview')}>
+            Tu árbol
+          </button>{' '}
+          · raíz · pasión
+        </p>
+        <label className="lt-field lt-title-field">
+          Nombre
+          <input
+            value={titleDraft}
+            maxLength={40}
+            onChange={(e) => setTitleDraft(e.target.value)}
+            onBlur={() => saveTitle(passion.title, (title) => updateCoreRoot({ ...passion, title }))}
+            onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+          />
+        </label>
+        <label className="lt-field">
+          Por qué te mueve
+          <textarea
+            value={rootDraft}
+            placeholder="Qué te da, desde cuándo, qué te gustaría que creciera de aquí…"
+            onChange={(e) => setRootDraft(e.target.value)}
+            onBlur={() => rootDraft !== passion.description && updateCoreRoot({ ...passion, description: rootDraft })}
+          />
+        </label>
+        <p className="lt-note">Este contexto queda guardado con tu árbol: más adelante servirá para que una IA entienda qué te mueve.</p>
+        <h3>Ramas que alimenta</h3>
+        {fed.length ? (
+          <ul className="lt-list">
+            {fed.map((p) => (
+              <li
+                key={p.id}
+                className="lt-click"
+                tabIndex={0}
+                onClick={() => {
+                  openBranch(p.id);
+                  engineRef.current?.zoomTo(p.id);
+                }}
+              >
+                <span className="nm">{p.title}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="lt-plain">Ninguna todavía. Se elige al brotar o editar una rama.</p>
+        )}
+        <div className="lt-acts">
+          <button className="lt-btn" onClick={() => setPanel('overview')}>
+            ← Volver
+          </button>
+          <button
+            className="lt-btn danger"
+            onClick={() => window.confirm(`¿Quitar la raíz «${passion.title}»?`) && (deleteCoreRoot(passion.id), setPanel('overview'))}
+          >
+            Quitar raíz
+          </button>
+        </div>
+      </>
+    );
   };
 
   const renderOverview = () => (
@@ -261,13 +425,51 @@ const LivingTreeView: React.FC<LivingTreeViewProps> = ({ onEditBranch, onOpenArc
           })}
         </ul>
       ) : (
-        <p className="lt-plain">Todavía no hay ramas. Brota la primera o importa tu árbol desde un JSON.</p>
+        <p className="lt-plain">Todavía no hay ramas. Brota la primera o importa tu árbol desde un archivo.</p>
       )}
+      <h3>Tronco · experiencia</h3>
+      {trunkSegments.length ? (
+        <ul className="lt-list">
+          {trunkSegments.map((t) => (
+            <li key={t.id} className="lt-click" tabIndex={0} onClick={() => openExperience(t.id)} onKeyDown={(e) => e.key === 'Enter' && openExperience(t.id)}>
+              <i className="lt-dot" style={{ background: '#9c9b92' }} />
+              <span className="nm">{t.title}</span>
+              {t.yearsOfExperience ? <span className="dd">{t.yearsOfExperience} años</span> : null}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="lt-plain">Aún no hay experiencia en el tronco.</p>
+      )}
+      <button className="lt-link" style={{ marginTop: 6 }} onClick={() => setSprout({ kind: 'trunk' })}>
+        + Añadir experiencia
+      </button>
+      <h3>Raíces · pasiones</h3>
+      {roots.length ? (
+        <ul className="lt-list">
+          {roots.map((r) => (
+            <li key={r.id} className="lt-click" tabIndex={0} onClick={() => openPassion(r.id)} onKeyDown={(e) => e.key === 'Enter' && openPassion(r.id)}>
+              <i className="lt-dot" style={{ background: '#c4463a' }} />
+              <span className="nm">{r.title}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="lt-plain">Aún no hay raíces.</p>
+      )}
+      <div className="lt-row-acts" style={{ marginTop: 6, flexWrap: 'wrap' }}>
+        <button className="lt-link" onClick={() => setSprout({ kind: 'root' })}>
+          + Añadir pasión
+        </button>
+        <button className="lt-link" onClick={onOpenPassionTest}>
+          Descubrirlas con un test de IA
+        </button>
+      </div>
       <div className="lt-acts">
         <button className="lt-btn" onClick={onOpenConnect}>
           Conectar apps
         </button>
-        <button className="lt-btn" onClick={onOpenData}>
+        <button className="lt-btn" onClick={() => onOpenData()}>
           Importar / exportar
         </button>
         <button className="lt-btn full" onClick={onOpenArchive}>
@@ -287,7 +489,16 @@ const LivingTreeView: React.FC<LivingTreeViewProps> = ({ onEditBranch, onOpenArc
           </button>{' '}
           · tronco · experiencia
         </p>
-        <h2>{experience.title}</h2>
+        <label className="lt-field lt-title-field">
+          Nombre
+          <input
+            value={titleDraft}
+            maxLength={40}
+            onChange={(e) => setTitleDraft(e.target.value)}
+            onBlur={() => saveTitle(experience.title, (title) => updateTrunkSegment({ ...experience, title }))}
+            onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+          />
+        </label>
         <p className="lt-last">
           {experience.yearsOfExperience ? `${experience.yearsOfExperience} años · ` : ''}nivel {experience.proficiencyLevel} de 5
         </p>
@@ -322,8 +533,14 @@ const LivingTreeView: React.FC<LivingTreeViewProps> = ({ onEditBranch, onOpenArc
               ))}
             </select>
           </label>
-          <button className="lt-btn full" onClick={() => setPanel('overview')}>
-            ← Volver al árbol
+          <button className="lt-btn" onClick={() => setPanel('overview')}>
+            ← Volver
+          </button>
+          <button
+            className="lt-btn danger"
+            onClick={() => window.confirm(`¿Quitar «${experience.title}» del tronco?`) && (deleteTrunkSegment(experience.id), setPanel('overview'))}
+          >
+            Quitar del tronco
           </button>
         </div>
       </>
@@ -441,7 +658,7 @@ const LivingTreeView: React.FC<LivingTreeViewProps> = ({ onEditBranch, onOpenArc
           <button className="lt-btn" onClick={() => setBranchStatus(p.id, p.status === 'paused' ? 'active' : 'paused')}>
             {p.status === 'paused' ? 'Reanudar' : 'Pausar'}
           </button>
-          <button className="lt-btn" onClick={() => onEditBranch(p)}>
+          <button className="lt-btn" onClick={() => setSprout({ kind: 'branch', editId: p.id })}>
             Editar
           </button>
           <button
@@ -544,7 +761,17 @@ const LivingTreeView: React.FC<LivingTreeViewProps> = ({ onEditBranch, onOpenArc
 
   return (
     <div className="lt">
-      <div className="lt-fig" ref={figRef}>
+      <div
+        className={`lt-fig${dragging ? ' drag' : ''}`}
+        ref={figRef}
+        onDragOver={(e) => {
+          if (!Array.from(e.dataTransfer.types).includes('Files')) return;
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={(e) => e.currentTarget === e.target && setDragging(false)}
+        onDrop={onDropFile}
+      >
         <canvas ref={canvasRef} aria-label="Árbol de proyectos: haz clic en una rama para acercarte" role="img" />
         {zoomed && (
           <button className="lt-back" onClick={zoomOut}>
@@ -552,22 +779,37 @@ const LivingTreeView: React.FC<LivingTreeViewProps> = ({ onEditBranch, onOpenArc
           </button>
         )}
         <div className="lt-tip" ref={tipRef} hidden />
-        {!treeProjects.length && (
+        {dragging && <div className="lt-dropzone">Suelta aquí tu archivo de Productivitree</div>}
+        {guide && (
+          <TreeGuide
+            step={guide.step}
+            done={stepDone}
+            leftover={leftover.count}
+            onStep={(step) => onGuide({ ...guide, step })}
+            onHint={setHint}
+            onPickFile={(text) => onOpenData(text)}
+            onRemoveLeftover={() => removeExampleParts(leftover)}
+            onClose={() => onGuide(null)}
+          />
+        )}
+        {!treeProjects.length && !guide && (
           <div className="lt-empty">
             <p>Tu árbol todavía no tiene ramas.</p>
             <div className="lt-acts" style={{ marginTop: 0 }}>
               <button className="lt-btn sprout" onClick={() => setSprout({ kind: 'branch' })}>
                 Brotar una rama
               </button>
-              <button className="lt-btn" onClick={onOpenData}>
-                Importar JSON
+              <button className="lt-btn" onClick={() => onOpenData()}>
+                Importar un archivo
               </button>
             </div>
           </div>
         )}
       </div>
       <aside className="lt-panel" aria-live="polite">
-        {panel === 'experience' && experience
+        {panel === 'passion' && passion
+          ? renderPassion()
+          : panel === 'experience' && experience
           ? renderExperience()
           : panel === 'branch' && project
             ? renderBranch(project)

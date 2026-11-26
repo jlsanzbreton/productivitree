@@ -1,82 +1,96 @@
-import React, { useContext, useState } from 'react';
+import { createPortal } from 'react-dom';
+import React, { useContext, useEffect, useState } from 'react';
+import '../LivingTree/livingTree.css';
 import { AppContext, AppContextType } from '../../contexts/AppContext';
-import { Modal } from '../UI/Modal';
-import { Button } from '../UI/Button';
 import { TESTER_FEEDBACK_URL } from '../../constants';
 
-interface PrivacyModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-}
+/** Settings: privacy switches, a full backup and the two "start again" buttons. */
+const PrivacyModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+  const { consent, setAiReflectionConsent, privacySettings, setPrivacySettings, exportAllData, deleteAllData } = useContext(AppContext) as AppContextType;
+  const [status, setStatus] = useState<string | null>(null);
 
-const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) => {
-  const { consent, setAiReflectionConsent, privacySettings, setPrivacySettings, exportAllData, resetDemoData, deleteAllData } =
-    useContext(AppContext) as AppContextType;
-  const [copyStatus, setCopyStatus] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    setStatus(null);
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
 
-  const handleExport = async () => {
-    const exportText = exportAllData();
-    await navigator.clipboard.writeText(exportText);
-    setCopyStatus('Data copied to clipboard.');
+  if (!isOpen) return null;
+
+  const copyBackup = () => {
+    navigator.clipboard?.writeText(exportAllData()).then(
+      () => setStatus('Copia de seguridad copiada al portapapeles. Pégala en un archivo para guardarla.'),
+      () => setStatus('No se pudo copiar. Prueba otra vez.')
+    );
   };
 
-  return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Privacy and Safety Controls">
-      <div className="space-y-5 text-sm">
-        <p className="text-amber-100/85">
-          Productivitree is configured for privacy-first local mode. Your core data is stored in your browser unless you explicitly
-          choose AI reflection.
-        </p>
-        <label className="flex items-center gap-3">
-          <input
-            type="checkbox"
-            checked={consent.aiReflectionConsent}
-            onChange={(event) => setAiReflectionConsent(event.target.checked)}
-          />
-          <span>Allow sending passion-test answers to server-side AI analysis.</span>
-        </label>
-        <label className="flex items-center gap-3">
-          <input
-            type="checkbox"
-            checked={privacySettings.localOnlyMode}
-            onChange={(event) =>
-              setPrivacySettings((prev) => ({
-                ...prev,
-                localOnlyMode: event.target.checked,
-              }))
-            }
-          />
-          <span>Force local-only mode (recommended).</span>
-        </label>
-        <label className="flex items-center gap-3">
-          <input
-            type="checkbox"
-            checked={privacySettings.analyticsEnabled}
-            onChange={(event) =>
-              setPrivacySettings((prev) => ({
-                ...prev,
-                analyticsEnabled: event.target.checked,
-              }))
-            }
-            disabled={privacySettings.localOnlyMode}
-          />
-          <span>Enable analytics (disabled while local-only mode is active).</span>
-        </label>
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={handleExport}>Copy Export JSON</Button>
-          <Button variant="secondary" onClick={resetDemoData}>
-            Reset Demo Data
-          </Button>
-          <Button variant="danger" onClick={deleteAllData}>
-            Delete All Data
-          </Button>
+  return createPortal(
+    <div className="lt-dialog-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="lt-dialog" role="dialog" aria-modal="true" aria-labelledby="pt-settings-title">
+        <button className="lt-x" onClick={onClose} aria-label="Cerrar">
+          ×
+        </button>
+        <h2 id="pt-settings-title">Ajustes</h2>
+        <p className="lt-sub">Tu árbol se guarda solo en este navegador. Nada sale de aquí salvo que tú lo permitas.</p>
+
+        <h3>Privacidad</h3>
+        <div className="lt-checks">
+          <label>
+            <input type="checkbox" checked={consent.aiReflectionConsent} onChange={(e) => setAiReflectionConsent(e.target.checked)} />
+            Permitir enviar las respuestas del test de pasiones a la IA para analizarlas
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={privacySettings.localOnlyMode}
+              onChange={(e) => setPrivacySettings((prev) => ({ ...prev, localOnlyMode: e.target.checked }))}
+            />
+            Solo en local (recomendado)
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={privacySettings.analyticsEnabled}
+              disabled={privacySettings.localOnlyMode}
+              onChange={(e) => setPrivacySettings((prev) => ({ ...prev, analyticsEnabled: e.target.checked }))}
+            />
+            Estadísticas de uso (desactivadas en modo local)
+          </label>
         </div>
-        {copyStatus && <p className="text-[#FEEA96]">{copyStatus}</p>}
-        <a href={TESTER_FEEDBACK_URL} target="_blank" rel="noreferrer" className="text-[#F9D967] underline decoration-[#D97A00] hover:text-[#FEEA96]">
-          Send Beta Feedback
-        </a>
+
+        <h3>Tus datos</h3>
+        <div className="lt-acts" style={{ marginTop: 0 }}>
+          <button className="lt-btn full" onClick={copyBackup}>
+            Copiar una copia de seguridad completa
+          </button>
+          <button
+            className="lt-btn danger full"
+            onClick={() => {
+              if (!window.confirm('Esto borra tu árbol y todos tus datos de este navegador, y vuelve a empezar con el árbol de ejemplo. ¿Seguro?')) return;
+              deleteAllData();
+              onClose();
+            }}
+          >
+            Borrar todo y empezar de cero
+          </button>
+        </div>
+        {status && (
+          <div className="lt-msg" role="status">
+            {status}
+          </div>
+        )}
+
+        <h3>Comentarios</h3>
+        <p className="lt-plain">
+          <a className="lt-link" href={TESTER_FEEDBACK_URL} target="_blank" rel="noreferrer">
+            Enviar comentarios sobre la beta
+          </a>
+        </p>
       </div>
-    </Modal>
+    </div>,
+    document.body
   );
 };
 

@@ -1,6 +1,6 @@
 import React, { useContext, useMemo, useState } from 'react';
+import '../LivingTree/livingTree.css';
 import { AppContext, AppContextType } from '../../contexts/AppContext';
-import { goldenPalette, visualTokens } from '../../constants';
 import { ProjectBranch, ProjectBranchStatus } from '../../types';
 import { PROJECT_STATUS_FILTERS, buildProjectSummaries, countByStatus } from '../../utils/projectSummary';
 
@@ -24,17 +24,13 @@ const STATUS_LABELS: Record<StatusFilter, string> = {
   completed: 'Completados',
 };
 
-const STATUS_CHIP: Record<ProjectBranchStatus, { label: string; className: string }> = {
-  active: { label: 'Activo', className: 'border-yellow-400/60 text-[#FEEA96] bg-yellow-500/10' },
-  paused: { label: 'Pausado', className: 'border-slate-400/50 text-slate-200 bg-slate-500/10' },
-  completed: { label: 'Completado', className: 'border-emerald-400/50 text-emerald-200 bg-emerald-500/10' },
-};
+const STATUS_LABELS_ONE: Record<ProjectBranchStatus, string> = { active: 'Activa', paused: 'En pausa', completed: 'Cerrada' };
 
 const HEALTH_INFO: Record<ProjectHealth, { label: string; dot: string }> = {
-  healthy: { label: 'Al día', dot: '#FEEA96' },
-  needs_attention: { label: 'Necesita atención', dot: '#E6A218' },
-  neglected: { label: 'Descuidado', dot: '#A59765' },
-  empty: { label: 'Sin tareas', dot: '#55534C' },
+  healthy: { label: 'Al día', dot: '#5f9a3a' },
+  needs_attention: { label: 'Necesita atención', dot: '#d6a21e' },
+  neglected: { label: 'Descuidada', dot: '#b0703a' },
+  empty: { label: 'Sin tareas', dot: '#a5a79a' },
 };
 
 const formatRelative = (iso: string | null): string => {
@@ -65,85 +61,52 @@ const ProjectListView: React.FC<ProjectListViewProps> = ({ onSelectProject }) =>
   );
 
   return (
-    <div className="h-full min-h-0 flex flex-col gap-3 max-w-3xl mx-auto w-full">
-      <div role="tablist" aria-label="Filtrar proyectos por estado" className="flex flex-wrap gap-2">
-        {(PROJECT_STATUS_FILTERS as StatusFilter[]).map((filter) => {
-          const selected = filter === statusFilter;
-          return (
-            <button
-              key={filter}
-              role="tab"
-              aria-selected={selected}
-              onClick={() => setStatusFilter(filter)}
-              className={`min-h-9 px-3 py-1.5 rounded-full text-sm border transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-500/60 ${
-                selected
-                  ? 'bg-gradient-to-r from-[#D97A00] to-[#F9D967] text-black border-transparent font-semibold'
-                  : 'border-yellow-700/40 text-[#FEEA96] hover:bg-yellow-500/10'
-              }`}
-            >
-              {STATUS_LABELS[filter]} <span className={selected ? 'opacity-70' : 'opacity-60'}>({counts[filter]})</span>
-            </button>
-          );
-        })}
+    <div className="lt-archive lt-listview">
+      <h2>Tus ramas</h2>
+      <p className="lt-sub">Todos los proyectos de un vistazo. Haz clic en uno para verlo en el árbol.</p>
+      <div className="lt-tabs" role="tablist" aria-label="Filtrar proyectos por estado">
+        {(PROJECT_STATUS_FILTERS as StatusFilter[]).map((filter) => (
+          <button key={filter} role="tab" aria-selected={filter === statusFilter} aria-pressed={filter === statusFilter} onClick={() => setStatusFilter(filter)}>
+            {STATUS_LABELS[filter]} ({counts[filter]})
+          </button>
+        ))}
       </div>
-
-      <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-2">
-        {summaries.length === 0 && (
-          <div
-            className="rounded-xl border px-4 py-6 text-center text-sm"
-            style={{ background: visualTokens.panelSurface, borderColor: visualTokens.panelBorder, color: visualTokens.panelText }}
-          >
-            {projects.length === 0
-              ? 'Todavía no tienes proyectos. Añade una rama con el botón +.'
-              : `No hay proyectos ${STATUS_LABELS[statusFilter].toLowerCase()}.`}
-          </div>
-        )}
-
+      {summaries.length === 0 && (
+        <p className="lt-plain">
+          {projects.length === 0 ? 'Todavía no hay ramas. Brota la primera desde el árbol.' : `No hay proyectos ${STATUS_LABELS[statusFilter].toLowerCase()}.`}
+        </p>
+      )}
+      <ul className="lt-cards">
         {summaries.map((summary) => {
           const { project } = summary;
-          const chip = STATUS_CHIP[project.status] || STATUS_CHIP.active;
           const health = HEALTH_INFO[summary.health];
           return (
-            <button
-              key={project.id}
-              onClick={() => onSelectProject(project)}
-              className="w-full text-left rounded-xl border px-4 py-3 transition-colors hover:border-yellow-500/60 focus:outline-none focus:ring-2 focus:ring-yellow-500/60"
-              style={{ background: visualTokens.panelSurface, borderColor: visualTokens.panelBorder, color: visualTokens.panelText }}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="font-semibold text-[#FEEA96] truncate">{project.title}</div>
-                  {project.description && <div className="text-xs opacity-75 line-clamp-2 mt-0.5">{project.description}</div>}
-                </div>
-                <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full border ${chip.className}`}>{chip.label}</span>
-              </div>
-
-              <div className="mt-3 h-1.5 rounded-full bg-white/10 overflow-hidden" aria-hidden="true">
-                <div
-                  className="h-full rounded-full"
-                  style={{
-                    width: `${summary.progress}%`,
-                    background: `linear-gradient(90deg, ${goldenPalette.mediumGold}, ${goldenPalette.brightGold})`,
-                  }}
-                />
-              </div>
-
-              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs opacity-85">
-                <span>
-                  {summary.completedStages}/{summary.totalStages} tareas · {summary.progress}%
+            <li key={project.id}>
+              <button className="lt-card" onClick={() => onSelectProject(project)}>
+                <span className="lt-card-head">
+                  <b>{project.title}</b>
+                  <span className={`lt-chip ${project.status}`}>{STATUS_LABELS_ONE[project.status]}</span>
                 </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block h-2 w-2 rounded-full" style={{ background: health.dot }} />
-                  {health.label}
-                  {summary.attentionStages > 0 && ` (${summary.attentionStages})`}
+                {project.description && <span className="lt-card-desc">{project.description}</span>}
+                <span className="lt-bar" aria-hidden="true">
+                  <i style={{ width: `${summary.progress}%` }} />
                 </span>
-                <span>Prioridad {project.priorityLevel}</span>
-                <span>Última actividad {formatRelative(summary.lastActivityAt)}</span>
-              </div>
-            </button>
+                <span className="lt-card-meta">
+                  <span>
+                    {summary.completedStages}/{summary.totalStages} tareas
+                  </span>
+                  <span>
+                    <i className="lt-dot" style={{ background: health.dot }} /> {health.label}
+                    {summary.attentionStages > 0 && ` (${summary.attentionStages})`}
+                  </span>
+                  <span>Prioridad {project.priorityLevel}</span>
+                  <span>Última actividad {formatRelative(summary.lastActivityAt)}</span>
+                </span>
+              </button>
+            </li>
           );
         })}
-      </div>
+      </ul>
     </div>
   );
 };

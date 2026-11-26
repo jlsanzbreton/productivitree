@@ -94,10 +94,10 @@ export interface AppContextType {
   updateTask: (task: ProjectStageLeaf) => void;
   deleteTask: (taskId: string) => void;
   completeTask: (taskId: string) => void;
-  addCoreRoot: (root: Omit<CorePurposeRoot, 'id' | 'userId' | 'createdAt'>) => void;
+  addCoreRoot: (root: Omit<CorePurposeRoot, 'id' | 'userId' | 'createdAt'>) => string;
   updateCoreRoot: (root: CorePurposeRoot) => void;
   deleteCoreRoot: (rootId: string) => void;
-  addTrunkSegment: (segment: Omit<SkillTrunkSegment, 'id' | 'userId' | 'createdAt'>) => void;
+  addTrunkSegment: (segment: Omit<SkillTrunkSegment, 'id' | 'userId' | 'createdAt'>) => string;
   updateTrunkSegment: (segment: SkillTrunkSegment) => void;
   deleteTrunkSegment: (segmentId: string) => void;
   addProjectBranch: (project: Omit<ProjectBranch, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => string;
@@ -122,6 +122,7 @@ export interface AppContextType {
   connections: AppConnection[];
   saveConnection: (connection: Omit<AppConnection, 'id' | 'createdAt'> & { id?: string }) => string;
   removeConnection: (connectionId: string) => void;
+  removeExampleParts: (parts: { purpose: boolean; rootIds: string[]; trunkIds: string[]; branchIds: string[]; appIds: string[] }) => void;
   history: HistoryEntry[];
   /** Everything, including archived (deleted) items. */
   archive: { projects: ProjectBranch[]; stages: ProjectStageLeaf[]; achievements: AchievementData[] };
@@ -138,7 +139,7 @@ export interface AppContextType {
   restoreItem: (kind: HistoryKind, id: string) => void;
   purgeItem: (kind: HistoryKind, id: string) => void;
   recordExternalActivity: (activity: ExternalActivity) => { ok: boolean; message: string; projectId?: string; taskId?: string };
-  importTree: (data: ImportedTree) => void;
+  importTree: (data: ImportedTree, options?: { quiet?: boolean }) => void;
 }
 
 export interface SproutBranchInput {
@@ -363,16 +364,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addCoreRoot = useCallback(
     (root: Omit<CorePurposeRoot, 'id' | 'userId' | 'createdAt'>) => {
+      const id = newId('root');
       setRoots((prev) => [
         ...prev,
         {
           ...root,
-          id: newId('root'),
+          id,
           userId: currentUser.id,
           createdAt: new Date().toISOString(),
         },
       ]);
       recordMeaningfulActivity();
+      return id;
     },
     [currentUser.id, recordMeaningfulActivity]
   );
@@ -391,16 +394,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addTrunkSegment = useCallback(
     (segment: Omit<SkillTrunkSegment, 'id' | 'userId' | 'createdAt'>) => {
+      const id = newId('trunk');
       setTrunkSegments((prev) => [
         ...prev,
         {
           ...segment,
-          id: newId('trunk'),
+          id,
           userId: currentUser.id,
           createdAt: new Date().toISOString(),
         },
       ]);
       recordMeaningfulActivity();
+      return id;
     },
     [currentUser.id, recordMeaningfulActivity]
   );
@@ -551,6 +556,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setConnections((prev) => prev.filter((item) => item.id !== connectionId));
     setProjects((prev) => prev.map((item) => (item.appId === connectionId ? { ...item, appId: undefined } : item)));
   }, []);
+
+  // Quietly removes the untouched parts of the first-run example tree (not logged: they were never the person's).
+  const removeExampleParts = useCallback(
+    (parts: { purpose: boolean; rootIds: string[]; trunkIds: string[]; branchIds: string[]; appIds: string[] }) => {
+      const drop = (ids: string[]) => (item: { id: string }) => !ids.includes(item.id);
+      if (parts.purpose) setCurrentUser((prev) => ({ ...prev, purpose: '' }));
+      setRoots((prev) => prev.filter(drop(parts.rootIds)));
+      setTrunkSegments((prev) => prev.filter(drop(parts.trunkIds)));
+      setProjects((prev) => prev.filter(drop(parts.branchIds)));
+      setCurrentTasks((prev) => prev.filter((item) => !parts.branchIds.includes(item.projectId)));
+      setAchievements((prev) => prev.filter((item) => !item.projectId || !parts.branchIds.includes(item.projectId)));
+      setConnections((prev) => prev.filter(drop(parts.appIds)));
+    },
+    []
+  );
 
   const sproutBranch = useCallback(
     (input: SproutBranchInput) => {
@@ -779,7 +799,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   );
 
   const importTree = useCallback(
-    (data: ImportedTree) => {
+    (data: ImportedTree, options?: { quiet?: boolean }) => {
       setCurrentUser((prev) => ({ ...prev, purpose: data.purpose || prev.purpose }));
       setRoots(data.roots);
       setTrunkSegments(data.trunkSegments);
@@ -788,6 +808,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setAchievements(data.achievements);
       setConnections(data.connections);
       setIsOnboardingComplete(true);
+      if (options?.quiet) return;
       logEvent('branch', 'import', `${data.projects.length} ramas`, 'imported', 'árbol importado desde JSON');
     },
     [logEvent]
@@ -1098,6 +1119,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         connections,
         saveConnection,
         removeConnection,
+        removeExampleParts,
         history,
         sproutBranch,
         sproutLeaf,

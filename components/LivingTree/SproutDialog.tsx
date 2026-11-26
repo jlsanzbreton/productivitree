@@ -4,15 +4,19 @@ import { AppContext, AppContextType } from '../../contexts/AppContext';
 
 /** What is being sprouted, and from where. One dialog for every new element of the tree. */
 export type SproutTarget =
-  | { kind: 'branch'; fromFruitId?: string }
+  | { kind: 'branch'; fromFruitId?: string; editId?: string }
+  | { kind: 'root' }
+  | { kind: 'trunk' }
   | { kind: 'leaf'; projectId: string }
   | { kind: 'fruit'; projectId: string; fromTaskId?: string };
 
-export type SproutResult = { kind: 'branch' | 'leaf' | 'fruit'; id: string; projectId: string };
+export type SproutResult = { kind: 'branch' | 'leaf' | 'fruit' | 'root' | 'trunk'; id: string; projectId: string; edited?: boolean };
 
 const COPY = {
   branch: { title: 'Brotar una rama', sub: 'Una rama es un proyecto. Crecerá en el árbol con su propia forma.', name: 'Nombre del proyecto', placeholder: 'Por ejemplo: Novela corta' },
   leaf: { title: 'Brotar una hoja', sub: 'Una hoja es una tarea concreta de esta rama.', name: 'Nombre de la tarea', placeholder: 'Por ejemplo: Corregir el capítulo 3' },
+  root: { title: 'Añadir una pasión', sub: 'Las raíces son lo que te mueve: lo que alimenta tus proyectos aunque nadie te pague por ello.', name: 'Pasión', placeholder: 'Por ejemplo: Naturaleza' },
+  trunk: { title: 'Añadir una experiencia', sub: 'El tronco es lo que ya sabes hacer: oficio, estudios, años de práctica. Sostiene las ramas.', name: 'Experiencia', placeholder: 'Por ejemplo: Ingeniería' },
   fruit: { title: 'Brotar un fruto', sub: 'Un fruto es un producto final: algo que se publica, se entrega o se usa.', name: 'Nombre del producto', placeholder: 'Por ejemplo: Relato publicado' },
 };
 
@@ -21,8 +25,10 @@ const SproutDialog: React.FC<{ target: SproutTarget | null; onClose: () => void;
   onClose,
   onDone,
 }) => {
-  const { projects, currentTasks, achievements, connections, roots, sproutBranch, sproutLeaf, sproutFruit } =
+  const { projects, currentTasks, achievements, connections, roots, sproutBranch, sproutLeaf, sproutFruit, addCoreRoot, addTrunkSegment, updateProjectBranch } =
     useContext(AppContext) as AppContextType;
+  const [about, setAbout] = useState('');
+  const [years, setYears] = useState(0);
   const [name, setName] = useState('');
   const [priority, setPriority] = useState(3);
   const [appId, setAppId] = useState('');
@@ -34,17 +40,21 @@ const SproutDialog: React.FC<{ target: SproutTarget | null; onClose: () => void;
 
   const fromFruit = target?.kind === 'branch' && target.fromFruitId ? achievements.find((a) => a.id === target.fromFruitId) : undefined;
   const fromFruitProject = fromFruit ? projects.find((p) => p.id === fromFruit.projectId) : undefined;
-  const askProject = Boolean(target && target.kind !== 'branch' && !target.projectId);
-  const projectId = target && target.kind !== 'branch' ? target.projectId || pickedProject : '';
+  const onBranch = target && (target.kind === 'leaf' || target.kind === 'fruit') ? target : null;
+  const editing = target?.kind === 'branch' && target.editId ? projects.find((p) => p.id === target.editId) : undefined;
+  const askProject = Boolean(onBranch && !onBranch.projectId);
+  const projectId = onBranch ? onBranch.projectId || pickedProject : '';
   const project = projectId ? projects.find((p) => p.id === projectId) : undefined;
   const fromTask = target?.kind === 'fruit' && target.fromTaskId ? currentTasks.find((t) => t.id === target.fromTaskId) : undefined;
 
   useEffect(() => {
     if (!target) return;
-    setName(fromFruit ? `${fromFruit.title}: siguiente` : '');
-    setPriority(3);
-    setAppId(fromFruitProject?.appId || '');
-    setRootId(fromFruitProject?.rootId || '');
+    setName(editing ? editing.title : fromFruit ? `${fromFruit.title}: siguiente` : '');
+    setPriority(editing ? editing.priorityLevel : 3);
+    setAppId(editing ? editing.appId || '' : fromFruitProject?.appId || '');
+    setRootId(editing ? editing.rootId || '' : fromFruitProject?.rootId || '');
+    setAbout('');
+    setYears(0);
     setLink('');
     setHarvested(false);
     setPickedProject(projects.find((p) => p.status !== 'completed')?.id || '');
@@ -60,7 +70,7 @@ const SproutDialog: React.FC<{ target: SproutTarget | null; onClose: () => void;
   }, [target, onClose]);
 
   if (!target) return null;
-  const copy = COPY[target.kind];
+  const copy = editing ? { ...COPY.branch, title: 'Editar la rama', sub: 'Cambia el nombre, el grosor, la app o la pasión que la alimenta.' } : COPY[target.kind];
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,7 +79,16 @@ const SproutDialog: React.FC<{ target: SproutTarget | null; onClose: () => void;
       inputRef.current?.focus();
       return;
     }
-    if (target.kind === 'branch') {
+    if (target.kind === 'root') {
+      const id = addCoreRoot({ title, description: about.trim(), strengthLevel: 3 });
+      onDone({ kind: 'root', id, projectId: '' });
+    } else if (target.kind === 'trunk') {
+      const id = addTrunkSegment({ title, description: about.trim(), proficiencyLevel: 3, yearsOfExperience: years });
+      onDone({ kind: 'trunk', id, projectId: '' });
+    } else if (editing) {
+      updateProjectBranch({ ...editing, title, priorityLevel: priority, appId: appId || undefined, rootId: rootId || undefined });
+      onDone({ kind: 'branch', id: editing.id, projectId: editing.id, edited: true });
+    } else if (target.kind === 'branch') {
       const id = sproutBranch({ title, priorityLevel: priority, appId: appId || undefined, rootId: rootId || undefined, sproutedFrom: fromFruit?.title });
       onDone({ kind: 'branch', id, projectId: id });
     } else if (!projectId) {
@@ -156,9 +175,22 @@ const SproutDialog: React.FC<{ target: SproutTarget | null; onClose: () => void;
           </>
         )}
 
-        {target.kind !== 'branch' && (
+        {(target.kind === 'root' || target.kind === 'trunk') && (
           <label className="lt-field">
-            {target.kind === 'fruit' ? 'Enlace al resultado (opcional)' : 'Enlace al documento (opcional)'}
+            {target.kind === 'root' ? 'Por qué te mueve (opcional)' : 'Qué sabes hacer aquí (opcional)'}
+            <textarea value={about} onChange={(e) => setAbout(e.target.value)} placeholder="Unas líneas de contexto. Más adelante ayudarán a una IA a entenderte." />
+          </label>
+        )}
+        {target.kind === 'trunk' && (
+          <label className="lt-field">
+            Años de experiencia
+            <input type="number" min={0} max={80} value={years} onChange={(e) => setYears(Math.max(0, Math.min(80, Number(e.target.value) || 0)))} />
+          </label>
+        )}
+
+        {onBranch && (
+          <label className="lt-field">
+            {onBranch.kind === 'fruit' ? 'Enlace al resultado (opcional)' : 'Enlace al documento (opcional)'}
             <input type="url" value={link} placeholder="https://…" onChange={(e) => setLink(e.target.value)} />
           </label>
         )}
@@ -176,7 +208,7 @@ const SproutDialog: React.FC<{ target: SproutTarget | null; onClose: () => void;
             Cancelar
           </button>
           <button type="submit" className="lt-btn sprout">
-            Brotar
+            {editing ? 'Guardar' : target.kind === 'root' || target.kind === 'trunk' ? 'Añadir' : 'Brotar'}
           </button>
         </div>
       </form>

@@ -20,7 +20,13 @@ const download = (name: string, text: string) => {
 };
 
 /** Feed the whole tree from a simple JSON file, or take it out in the same format. */
-const TreeDataDialog: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+const TreeDataDialog: React.FC<{ isOpen: boolean; onClose: () => void; initialText?: string; skipConfirm?: boolean; onImported?: () => void }> = ({
+  isOpen,
+  onClose,
+  initialText = '',
+  skipConfirm = false,
+  onImported,
+}) => {
   const { purpose, roots, trunkSegments, projects, currentTasks, achievements, connections, currentUser, importTree } =
     useContext(AppContext) as AppContextType;
   const [text, setText] = useState('');
@@ -29,13 +35,13 @@ const TreeDataDialog: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ is
 
   useEffect(() => {
     if (!isOpen) return undefined;
-    setText('');
-    setParsed(null);
+    setText(initialText);
+    setParsed(initialText.trim() ? parseTreeJson(initialText, { userId: currentUser.id }) : null);
     setDone('');
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, initialText]);
 
   if (!isOpen) return null;
 
@@ -58,12 +64,13 @@ const TreeDataDialog: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ is
 
   const apply = () => {
     if (!parsed || !parsed.ok) return;
-    const hasTree = projects.length > 0;
+    const hasTree = projects.length > 0 && !skipConfirm;
     if (hasTree && !window.confirm('Esto reemplaza tu árbol actual (ramas, hojas, frutos, pasiones, experiencia y apps). ¿Seguro? Si dudas, expórtalo antes.')) return;
     importTree(parsed.data as Parameters<typeof importTree>[0]);
     setDone(`Árbol importado: ${parsed.summary.branches} ramas, ${parsed.summary.leaves} hojas y ${parsed.summary.fruits} frutos.`);
     setParsed(null);
     setText('');
+    onImported?.();
   };
 
   return createPortal(

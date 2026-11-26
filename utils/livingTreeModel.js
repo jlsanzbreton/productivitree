@@ -92,7 +92,8 @@ export const buildLivingTreeModel = (
   });
   return {
     purpose: (purpose || '').trim(),
-    roots: roots.map((root) => root.title).filter(Boolean).slice(0, 7),
+    roots: roots.filter((root) => root.title).map((root) => root.title).slice(0, 7),
+    rootIds: roots.filter((root) => root.title).map((root) => root.id).slice(0, 7),
     trunk: trunkSegments.map((segment) => splitTwoLines(segment.title)).slice(0, 5),
     trunkIds: trunkSegments.map((segment) => segment.id).slice(0, 5),
     branches,
