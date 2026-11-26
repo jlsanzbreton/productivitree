@@ -29,6 +29,12 @@ const hashId = (id) => {
   for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) % 2147483646;
   return h + 1;
 };
+// Beech-grey bark at the foot, turning into the light green of the branches higher up.
+const BEECH = [156, 155, 146];
+const TRUNK_TOP = [184, 200, 156];
+const trunkCol = (t) => mix(BEECH, TRUNK_TOP, Math.pow(Math.max(0, Math.min(1, t)), 1.25));
+const BAND0 = 0.06;
+const BAND = 0.11;
 const trunkAt = (t) => ({ x: CX + Math.sin(t * Math.PI) * 10 - t * 6, y: GY - t * TH, w: 72 - t * 42 });
 const hand = (px, b) => `${b ? 700 : 500} ${px}px Caveat, "Bradley Hand", "Segoe Print", cursive`;
 
@@ -65,6 +71,8 @@ export function createLivingTree(cv, opts) {
   let selBranch = null;
   let selLeaf = null;
   let selFruit = null;
+  let selTrunk = null;
+  let hoverTrunk = null;
   let zoomed = null;
   let settled = true;
   let focusA = 0;
@@ -451,7 +459,7 @@ export function createLivingTree(cv, opts) {
     let fillS = rgb(base);
     let edgeA = 1;
     if (s.collar) {
-      const TR = [250, 248, 238];
+      const TR = trunkCol(p.t);
       const gk = base.join();
       const moved = s.gx === undefined || Math.abs(s.gx - s.x0) + Math.abs(s.gy - s.y0) + Math.abs(s.gx1 - s.x1) + Math.abs(s.gy1 - s.y1) > 2;
       if (!moved && gk === s.gk && s.gctx === ctx) {
@@ -763,11 +771,30 @@ export function createLivingTree(cv, opts) {
       .reverse()
       .forEach((p) => ctx.lineTo(p[0], p[1]));
     ctx.closePath();
-    ctx.fillStyle = 'rgba(252,250,242,.9)';
+    const tg = ctx.createLinearGradient(0, GY, 0, GY - TH);
+    [0, 0.25, 0.5, 0.75, 1].forEach((u) => tg.addColorStop(u, rgb(trunkCol(u))));
+    ctx.fillStyle = tg;
     ctx.fill();
     ctx.save();
     ctx.clip();
-    ctx.strokeStyle = 'rgba(90,96,70,.35)';
+    // round shading: light on the left, shadow on the right, so the bark reads as a cylinder
+    const sh = ctx.createLinearGradient(CX - 46, 0, CX + 46, 0);
+    sh.addColorStop(0, 'rgba(60,60,50,.18)');
+    sh.addColorStop(0.3, 'rgba(255,255,248,.22)');
+    sh.addColorStop(0.62, 'rgba(255,255,248,0)');
+    sh.addColorStop(1, 'rgba(40,42,34,.26)');
+    ctx.fillStyle = sh;
+    ctx.fillRect(CX - 80, GY - TH - 10, 160, TH + 40);
+    // the experience band under the pointer (or selected) lights up a little
+    const nb = model.trunk.length;
+    [hoverTrunk, selTrunk].forEach((bi, k2) => {
+      if (bi === null || bi < 0 || bi >= nb) return;
+      const t0 = bi === 0 ? 0 : BAND0 + (bi - 0.5) * BAND;
+      const t1 = BAND0 + (bi + 0.5) * BAND;
+      ctx.fillStyle = k2 ? 'rgba(255,214,110,.22)' : 'rgba(255,250,225,.2)';
+      ctx.fillRect(CX - 80, GY - t1 * TH, 160, (t1 - t0) * TH);
+    });
+    ctx.strokeStyle = 'rgba(70,72,62,.32)';
     ctx.lineWidth = 0.6;
     ctx.beginPath();
     for (let j = 0; j < 120; j++) {
@@ -777,7 +804,7 @@ export function createLivingTree(cv, opts) {
       ctx.lineTo(x0 + tp.w * 0.24, tp.y - 3);
     }
     ctx.stroke();
-    ctx.strokeStyle = 'rgba(90,96,70,.22)';
+    ctx.strokeStyle = 'rgba(70,72,62,.2)';
     for (let i = 0; i < 5; i++) {
       ctx.beginPath();
       for (let j = 0; j <= 16; j++) {
@@ -788,8 +815,23 @@ export function createLivingTree(cv, opts) {
       }
       ctx.stroke();
     }
+    // suggested divisions between experiences: faint rings that wrap the trunk
+    for (let i = 0; i < nb; i++) {
+      const tp = trunkAt(BAND0 + (i + 0.5) * BAND);
+      const rx = tp.w / 2 + 1;
+      ctx.beginPath();
+      ctx.ellipse(tp.x, tp.y, rx, 3.2, 0, 0.08, Math.PI - 0.08);
+      ctx.strokeStyle = 'rgba(58,60,50,.38)';
+      ctx.lineWidth = 0.9;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(tp.x, tp.y + 1.4, rx, 3.2, 0, 0.15, Math.PI - 0.15);
+      ctx.strokeStyle = 'rgba(255,255,244,.32)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    }
     ctx.restore();
-    ctx.strokeStyle = 'rgba(84,92,62,.85)';
+    ctx.strokeStyle = 'rgba(70,74,58,.85)';
     ctx.lineWidth = 1.3;
     ctx.beginPath();
     Lp.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
@@ -797,16 +839,17 @@ export function createLivingTree(cv, opts) {
     ctx.beginPath();
     Rp.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
     ctx.stroke();
+    // experience carved into the round trunk (vertical cylinder: letters squeeze towards the edges)
     model.trunk.forEach(([a, b], i) => {
-      const tp = trunkAt(0.06 + i * 0.11);
+      const tp = trunkAt(BAND0 + i * BAND);
       const R = tp.w / 2;
-      let fs = 15;
+      let fs = 16;
       ctx.font = hand(fs, 1);
       const mw = Math.max(ctx.measureText(a).width, ctx.measureText(b || '').width);
-      if (mw > tp.w * 0.8) fs *= (tp.w * 0.8) / mw;
+      if (mw > tp.w * 0.88) fs *= (tp.w * 0.88) / mw;
       if (b) {
-        carveChar(a, tp.x, tp.y - fs * 0.52, 0, fs, R, true);
-        carveChar(b, tp.x, tp.y + fs * 0.52, 0, fs, R, true);
+        carveChar(a, tp.x, tp.y - fs * 0.5, 0, fs, R, true);
+        carveChar(b, tp.x, tp.y + fs * 0.5, 0, fs, R, true);
       } else carveChar(a, tp.x, tp.y, 0, fs, R, true);
     });
   }
@@ -979,6 +1022,16 @@ export function createLivingTree(cv, opts) {
     }
     return best;
   }
+  function pickTrunk(x, y) {
+    const n = model.trunk.length;
+    if (!n) return null;
+    const t = (GY - y) / TH;
+    const top = BAND0 + (n - 0.5) * BAND;
+    if (t < 0 || t > top) return null;
+    const tp = trunkAt(t);
+    if (Math.abs(x - tp.x) > tp.w / 2 + 2) return null;
+    return Math.max(0, Math.min(n - 1, Math.round((t - BAND0) / BAND)));
+  }
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const ago = (d) => (d < 1 ? 'hoy' : d < 2 ? 'ayer' : `hace ${Math.round(d)} días`);
 
@@ -990,20 +1043,27 @@ export function createLivingTree(cv, opts) {
     const fu = pickFruit(x, y);
     const lf = fu ? null : pickLeaf(x, y);
     const br = fu ? fu[0] : lf ? lf[0] : pickBranch(x, y);
+    const tk = fu || lf || br ? null : pickTrunk(x, y);
     hoverLeaf = lf ? lf[1].id : null;
     hover = br ? br.id : null;
-    cv.style.cursor = fu || lf || br ? 'pointer' : 'default';
+    if (tk !== hoverTrunk) {
+      hoverTrunk = tk;
+      bgKey = '';
+    }
+    cv.style.cursor = fu || lf || br || tk !== null ? 'pointer' : 'default';
     if (!tipEl) return;
     if (fu) tipEl.innerHTML = `<b>${esc(fu[1].n)}</b>Fruto · ${fu[1].done ? 'cosechado' : 'madurando'} · clic para abrirlo`;
     else if (lf) tipEl.innerHTML = `<b>${esc(lf[1].n)}</b>${esc(lf[0].name)} · ${leafStateLabel(lf[1])}${lf[1].done ? '' : ' · ' + ago(lf[1].d)}`;
     else if (br) tipEl.innerHTML = `<b>${esc(br.name)}</b>${br.paused ? 'En pausa' : 'Rama'} · ${br.tasks.filter((t) => !t.done).length} tareas abiertas`;
-    tipEl.hidden = !(fu || lf || br);
+    else if (tk !== null) tipEl.innerHTML = `<b>${esc(model.trunk[tk].filter(Boolean).join(' '))}</b>Experiencia · clic para verla y añadir contexto`;
+    tipEl.hidden = !(fu || lf || br || tk !== null);
     tipEl.style.left = mx + 'px';
     tipEl.style.top = my + 'px';
   }
   function onLeave() {
     hover = null;
     hoverLeaf = null;
+    hoverTrunk = null;
     if (tipEl) tipEl.hidden = true;
   }
   function onClick(e) {
@@ -1025,6 +1085,12 @@ export function createLivingTree(cv, opts) {
     if (br) {
       zoomTo(br.id);
       if (opts.onBranch) opts.onBranch(br.id);
+      return;
+    }
+    const tk = pickTrunk(x, y);
+    if (tk !== null) {
+      if (zoomed) zoomTo(null);
+      if (opts.onTrunk) opts.onTrunk(tk);
       return;
     }
     if (zoomed) {
@@ -1050,10 +1116,11 @@ export function createLivingTree(cv, opts) {
       rightInset = next;
       if (zoomed) zoomTo(zoomed);
     },
-    select({ branchId = null, leafId = null, fruitId = null } = {}) {
+    select({ branchId = null, leafId = null, fruitId = null, trunkIndex = null } = {}) {
       selBranch = branchId;
       selLeaf = leafId;
       selFruit = fruitId;
+      selTrunk = trunkIndex;
       bgKey = '';
     },
     destroy() {

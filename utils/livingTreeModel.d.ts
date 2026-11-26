@@ -14,7 +14,7 @@ export interface LivingBranch {
   tasks: LivingLeaf[];
   fruits: LivingFruit[];
 }
-export interface LivingTreeModel { purpose: string; roots: string[]; trunk: string[][]; branches: LivingBranch[] }
+export interface LivingTreeModel { purpose: string; roots: string[]; trunk: string[][]; trunkIds: string[]; branches: LivingBranch[] }
 
 export const DAY_MS: number;
 export function isFruit(item: Partial<AchievementData> | null | undefined): boolean;
