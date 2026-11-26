@@ -40,6 +40,15 @@ import {
 } from '../utils/persistence';
 import { applyActivityBoost, applyHealthDecay, applyWaterBoost, deriveStageStatusFromNeglect } from '../utils/healthEngine';
 import { buildTreeData } from '../utils/treeBuilder';
+import {
+  createBackupJson,
+  getLastBackupAt,
+  markBackupDone,
+  parseBackup,
+  requestPersistentStorage,
+  restoreBackup,
+} from '../services/backupService';
+import { backupFileName, summarizeBackup } from '../utils/backup';
 import { analyzeDraftNow, getAttemptHistory, getLatestResult, loadLatestDraft, saveDraft } from '../services/passionService';
 
 export interface AppContextType {
@@ -106,10 +115,22 @@ export interface AppContextType {
   privacySettings: PrivacySettings;
   setPrivacySettings: React.Dispatch<React.SetStateAction<PrivacySettings>>;
   exportAllData: () => string;
+  downloadBackup: () => Promise<void>;
+  previewBackup: (text: string) => BackupSummary;
+  restoreFromBackup: (text: string) => Promise<void>;
+  lastBackupAt: string | null;
+  storagePersisted: boolean | null;
   resetDemoData: () => void;
   deleteAllData: () => void;
   schemaVersion: number;
   migrateToLatestSchema: () => void;
+}
+
+export interface BackupSummary {
+  exportedAt: string | null;
+  projects: number;
+  stages: number;
+  roots: number;
 }
 
 const newId = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
@@ -181,6 +202,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [editingTask, setEditingTask] = useState<ProjectStageLeaf | null>(null);
   const [consent, setConsent] = useState<DataConsentSettings>(initial.consent);
   const [privacySettings, setPrivacySettings] = useState<PrivacySettings>(initial.privacy);
+  const [lastBackupAt, setLastBackupAt] = useState<string | null>(() => getLastBackupAt());
+  const [storagePersisted, setStoragePersisted] = useState<boolean | null>(null);
   const [passionDraftStatus, setPassionDraftStatus] = useState<PassionDraftStatus>({
     draftId: null,
     hasDraft: false,
@@ -218,8 +241,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [activeBackground, activeTreeTheme, treeSpecies]);
 
-  const persistState = useCallback(() => {
-    const payload: AppPersistedState = {
+  const persistedState = useMemo<AppPersistedState>(
+    () => ({
       schemaVersion: APP_SCHEMA_VERSION,
       user: currentUser,
       roots,
@@ -235,28 +258,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       passionTestResult,
       consent,
       privacy: privacySettings,
-    };
-    savePersistedState(payload);
-  }, [
-    currentUser,
-    roots,
-    trunkSegments,
-    projects,
-    currentTasks,
-    achievements,
-    activeBackground,
-    activeTreeTheme,
-    treeSpecies,
-    treeHealthState,
-    isOnboardingComplete,
-    passionTestResult,
-    consent,
-    privacySettings,
-  ]);
+    }),
+    [
+      currentUser,
+      roots,
+      trunkSegments,
+      projects,
+      currentTasks,
+      achievements,
+      activeBackground,
+      activeTreeTheme,
+      treeSpecies,
+      treeHealthState,
+      isOnboardingComplete,
+      passionTestResult,
+      consent,
+      privacySettings,
+    ]
+  );
+
+  const persistState = useCallback(() => {
+    savePersistedState(persistedState);
+  }, [persistedState]);
 
   useEffect(() => {
     persistState();
   }, [persistState]);
+
+  useEffect(() => {
+    let cancelled = false;
+    requestPersistentStorage().then((granted) => {
+      if (!cancelled) setStoragePersisted(granted);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const recordMeaningfulActivity = useCallback(() => {
     const nowIso = new Date().toISOString();
@@ -593,42 +630,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [analyzePassionDraft, consent.aiReflectionConsent, savePassionDraft]
   );
 
-  const exportAllData = useCallback(
-    () =>
-      exportPersistedState({
-        schemaVersion: APP_SCHEMA_VERSION,
-        user: currentUser,
-        roots,
-        trunkSegments,
-        projects,
-        stages: currentTasks,
-        achievements,
-        activeBackground,
-        activeTreeTheme,
-        treeSpecies,
-        treeHealth: treeHealthState,
-        isOnboardingComplete,
-        passionTestResult,
-        consent,
-        privacy: privacySettings,
-      }),
-    [
-      currentUser,
-      roots,
-      trunkSegments,
-      projects,
-      currentTasks,
-      achievements,
-      activeBackground,
-      activeTreeTheme,
-      treeSpecies,
-      treeHealthState,
-      isOnboardingComplete,
-      passionTestResult,
-      consent,
-      privacySettings,
-    ]
-  );
+  const exportAllData = useCallback(() => exportPersistedState(persistedState), [persistedState]);
+
+  const downloadBackup = useCallback(async () => {
+    const now = new Date();
+    const json = await createBackupJson(persistedState, now);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = backupFileName(now);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setLastBackupAt(markBackupDone(now));
+  }, [persistedState]);
+
+  const previewBackup = useCallback((text: string): BackupSummary => summarizeBackup(parseBackup(text)), []);
+
+  const restoreFromBackup = useCallback(async (text: string) => {
+    const backup = parseBackup(text);
+    await restoreBackup(backup, APP_SCHEMA_VERSION);
+    window.location.reload();
+  }, []);
 
   const resetDemoData = useCallback(() => {
     const nextDefaults = buildDefaults();
@@ -735,6 +760,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         privacySettings,
         setPrivacySettings,
         exportAllData,
+        downloadBackup,
+        previewBackup,
+        restoreFromBackup,
+        lastBackupAt,
+        storagePersisted,
         resetDemoData,
         deleteAllData,
         schemaVersion: APP_SCHEMA_VERSION,

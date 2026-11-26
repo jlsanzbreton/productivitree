@@ -107,8 +107,16 @@ export const loadPersistedState = (defaults) => {
   return migrateLegacyStorage(defaults);
 };
 
-export const savePersistedState = (state) => {
+let persistenceSuspended = false;
+
+// Stops regular autosaves, e.g. while a backup restore is about to reload the page.
+export const suspendPersistence = () => {
+  persistenceSuspended = true;
+};
+
+export const savePersistedState = (state, options = {}) => {
   if (!hasWindow()) return;
+  if (persistenceSuspended && !options.force) return;
   localStorage.setItem(STORAGE_KEYS.schemaVersion, String(state.schemaVersion));
   localStorage.setItem(STORAGE_KEYS.consolidatedState, JSON.stringify(state));
 };
