@@ -72,7 +72,7 @@ export const normalizeBranchStatus = (status) =>
 // priorityLevel goes 1-5 in the UI. 3 keeps today's thickness.
 export const priorityWidthMultiplier = (priorityLevel) => {
   const level = clamp(Number(priorityLevel) || 3, 1, 5);
-  return 0.6 + (level - 1) * 0.2; // 1 -> 0.60, 3 -> 1.00, 5 -> 1.40
+  return 0.4 + (level - 1) * 0.3; // 1 -> 0.40, 3 -> 1.00, 5 -> 1.60
 };
 
 export const leafCompletionRatio = (leaves) => {
