@@ -2,6 +2,7 @@ import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppContext, AppContextType } from '../../contexts/AppContext';
 import { treeThemes } from '../../constants';
 import { LeafStatus, TreeNode, TreeSpecies } from '../../types';
+import { branchStatusLabel, getBranchVisualState } from '../../utils/branchVisuals.js';
 
 interface TreeVisualizationCanvasProps {
   treeData: TreeNode;
@@ -37,7 +38,10 @@ interface BranchPath {
   leafCount: number;
   growthScale: number;
   node: TreeNode;
+  visual: BranchVisual;
 }
+
+type BranchVisual = ReturnType<typeof getBranchVisualState>;
 
 interface WaterParticle {
   x: number;
@@ -385,6 +389,13 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
           widthScale *= 0.62;
         }
         const growthScale = clamp((lengthScale + widthScale) / 2, 0.22, 1.92);
+        const branchData = (branch.data || {}) as Record<string, unknown>;
+        const visual = getBranchVisualState({
+          status: branchData.status,
+          priorityLevel: branchData.priorityLevel,
+          leaves: branchLeaves.map((leaf) => leaf.data as Record<string, unknown>),
+          baseColor: palette.branch,
+        });
 
         let startY = h * (0.33 + ratio * 0.31);
         let span = w * (0.16 + ratio * 0.12) * lengthScale;
@@ -421,7 +432,8 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
         const gravity = 10 + 14 * lengthScale + Math.abs(ratio - 0.5) * 10 + endYOffset;
         const end: Point = {
           x: start.x + side * span + swayAt(startY) * (treeSpecies === 'fir' ? 0.45 : 0.85),
-          y: start.y - lift + gravity,
+          // Paused projects sag: the tip hangs lower, like a withering branch.
+          y: start.y - lift + gravity + visual.droop,
         };
 
         const cp1Distance = 24 + 14 * lengthScale;
@@ -435,7 +447,7 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
         const cp2: Point = {
           x: start.x + side * cp2Out,
           // Long branches start rising, then bend and slightly drop by weight.
-          y: end.y - (8 - Math.min(6, lengthScale * 3)),
+          y: end.y - (8 - Math.min(6, lengthScale * 3)) - visual.droop * 0.6,
         };
 
         return {
@@ -448,6 +460,7 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
           cp2,
           end,
           startY,
+          visual,
         };
       });
 
@@ -509,6 +522,7 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
           Math.max(3.2, trunkWidth * 0.72)
         );
         const tipWidth = clamp(startWidth * (0.2 + skeleton.growthScale * 0.06), 0.7, 3.8);
+        const widthFactor = skeleton.visual.widthMultiplier;
 
         return {
           id: skeleton.id,
@@ -519,15 +533,17 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
           leafCount: skeleton.leafCount,
           growthScale: skeleton.growthScale,
           node: skeleton.node,
-          startWidth,
-          tipWidth,
+          startWidth: startWidth * widthFactor,
+          tipWidth: Math.max(0.6, tipWidth * widthFactor),
+          visual: skeleton.visual,
         };
       });
 
       const drawTaperedBranch = (branchPath: BranchPath) => {
-        ctx.strokeStyle = palette.branch;
+        const { visual } = branchPath;
+        ctx.strokeStyle = visual.color;
         ctx.shadowColor = palette.glow;
-        ctx.shadowBlur = 8 + branchPath.growthScale * 4;
+        ctx.shadowBlur = (8 + branchPath.growthScale * 4) * visual.glowMultiplier;
         const segments = 14;
 
         for (let index = 0; index < segments; index += 1) {
@@ -543,24 +559,68 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
           ctx.stroke();
         }
 
+        // Ripening light: runs from the base towards the tip as leaves are completed.
+        if (visual.completionRatio > 0) {
+          ctx.strokeStyle = visual.ripeColor;
+          ctx.shadowColor = 'rgba(254, 234, 150, 0.6)';
+          ctx.shadowBlur = 6 * visual.glowMultiplier;
+          const ripeSegments = Math.max(1, Math.round(segments * visual.completionRatio));
+          for (let index = 0; index < ripeSegments; index += 1) {
+            const t0 = index / segments;
+            const t1 = Math.min(visual.completionRatio, (index + 1) / segments);
+            const p0 = cubicPoint(branchPath.start, branchPath.cp1, branchPath.cp2, branchPath.end, t0);
+            const p1 = cubicPoint(branchPath.start, branchPath.cp1, branchPath.cp2, branchPath.end, t1);
+            ctx.globalAlpha = 0.95;
+            ctx.lineWidth = Math.max(0.6, lerp(branchPath.startWidth, branchPath.tipWidth, (t0 + t1) / 2) * 0.55);
+            ctx.beginPath();
+            ctx.moveTo(p0.x, p0.y);
+            ctx.lineTo(p1.x, p1.y);
+            ctx.stroke();
+          }
+          ctx.globalAlpha = 1;
+        }
+
         ctx.shadowBlur = 0;
       };
 
       branchPaths.forEach((branchPath) => {
         drawTaperedBranch(branchPath);
 
-        ctx.fillStyle = palette.branch;
+        ctx.fillStyle = branchPath.visual.color;
         ctx.beginPath();
         ctx.arc(branchPath.end.x, branchPath.end.y, clamp(branchPath.tipWidth * 1.05, 2, 4), 0, Math.PI * 2);
         ctx.fill();
 
+        if (branchPath.visual.tipBloom) {
+          // Completed project: a pulsing golden bloom at the branch tip.
+          const pulse = 0.5 + Math.sin(time / 900 + stringHash(branchPath.id)) * 0.5;
+          ctx.fillStyle = '#FEEA96';
+          ctx.shadowColor = 'rgba(254, 234, 150, 0.9)';
+          ctx.shadowBlur = 14 + pulse * 8;
+          // Hangs just below the tip so the leaf cluster doesn't hide it.
+          const fruitX = branchPath.end.x;
+          const fruitY = branchPath.end.y + 14;
+          ctx.strokeStyle = branchPath.visual.color;
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(branchPath.end.x, branchPath.end.y);
+          ctx.lineTo(fruitX, fruitY - 4);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(fruitX, fruitY, 5 + pulse * 1.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+        }
+
+        const branchData = (branchPath.node.data || {}) as Record<string, unknown>;
+        const percent = Math.round(branchPath.visual.completionRatio * 100);
         hitNodes.push({
           id: branchPath.id,
           x: branchPath.end.x,
           y: branchPath.end.y,
           r: 12,
           node: branchPath.node,
-          label: String((branchPath.node.data as Record<string, unknown>)?.title || 'Project Branch'),
+          label: `${String(branchData.title || 'Project Branch')} · ${branchStatusLabel(branchData.status)} · ${percent}%`,
         });
       });
 
@@ -622,8 +682,9 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
         const leafScale = stageVisual.size * ageScale;
         const glowStrength = stageVisual.glow * (hasNoProgressYet ? 0.78 : 1);
 
+        ctx.globalAlpha = branch.visual.leafAlpha;
         ctx.shadowColor = colorSet.glow;
-        ctx.shadowBlur = glowStrength;
+        ctx.shadowBlur = glowStrength * Math.min(1, branch.visual.glowMultiplier + 0.3);
         ctx.fillStyle = colorSet.fill;
 
         if (treeSpecies === 'fir') {
@@ -661,6 +722,7 @@ const TreeVisualizationCanvas: React.FC<TreeVisualizationCanvasProps> = ({
           }
         }
         ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1;
 
         hitNodes.push({
           id: leaf.id,
