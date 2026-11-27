@@ -10,6 +10,7 @@ type Tab = 'closed' | 'paused' | 'deleted' | 'log';
 const ACTION_LABEL: Record<HistoryAction, string> = {
   created: 'brotó',
   sprouted: 'brotó de un fruto',
+  grown: 'creció de una ramita',
   completed: 'se cerró',
   reopened: 'se reabrió',
   paused: 'se pausó',

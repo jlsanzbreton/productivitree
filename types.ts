@@ -49,6 +49,8 @@ export interface ProjectBranch {
   rootId?: string;
   /** Name of the harvested fruit this branch sprouted from. */
   sproutedFrom?: string;
+  /** Branch whose twig grew into this one; it comes out of the trunk next to it. */
+  grownFrom?: string;
   /** Optional placement overrides for the drawing. */
   side?: 'left' | 'right' | 'center';
   height?: number;
@@ -122,6 +124,8 @@ export interface ProjectStageLeaf {
   activity?: ActivityEntry[];
   /** Direct link to this task's document, overriding the app's URL. */
   link?: string;
+  /** Leaf this one grows from: a leaf with leaves of its own is a twig. */
+  parentTaskId?: string;
   deletedAt?: string;
 }
 
@@ -145,6 +149,7 @@ export type HistoryKind = 'branch' | 'leaf' | 'fruit';
 export type HistoryAction =
   | 'created'
   | 'sprouted'
+  | 'grown'
   | 'completed'
   | 'reopened'
   | 'paused'

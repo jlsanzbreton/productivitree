@@ -2,6 +2,7 @@
 // It is not the full backup (that one restores every setting): it only carries
 // purpose, passions, experience, apps, branches, leaves and fruits.
 // Format documented in docs/arbol-json.md.
+import { twigParent } from './livingTreeModel.js';
 
 export const TREE_JSON_VERSION = 1;
 
@@ -155,19 +156,20 @@ export const parseTreeJson = (raw, { userId, now = new Date() } = {}) => {
       ...(SIDES.includes(branch.side) ? { side: branch.side } : {}),
       ...(branch.height !== undefined ? { height: clamp(branch.height, 0, 1, 0.7) } : {}),
       ...(text(branch.sproutedFrom) ? { sproutedFrom: text(branch.sproutedFrom) } : {}),
+      ...(text(branch.grownFrom) ? { grownFrom: text(branch.grownFrom) } : {}),
     });
 
-    (Array.isArray(branch.leaves) ? branch.leaves : []).map(asItem).forEach((leaf, leafIndex) => {
+    const addLeaf = (leaf, leafIndex, parent) => {
       const leafName = leaf && text(leaf.name);
       if (!leafName) {
-        errors.push(`Rama "${name}", hoja ${leafIndex + 1}: falta "name".`);
+        errors.push(`Rama "${name}", hoja ${parent ? `de la ramita "${parent.title}" ` : ''}${leafIndex + 1}: falta "name".`);
         return;
       }
       const last = toIso(leaf.lastActivity, now);
       if (last === undefined) warnings.push(`Hoja "${leafName}": fecha "lastActivity" no válida, uso hoy.`);
       const lastActivityAt = last || stamp;
       const done = leaf.done === true;
-      stages.push({
+      const stage = {
         id: uniqueId('stage', `${name}-${leafName}`),
         userId,
         projectId,
@@ -181,8 +183,13 @@ export const parseTreeJson = (raw, { userId, now = new Date() } = {}) => {
         ...(text(leaf.notes) ? { notes: text(leaf.notes) } : {}),
         ...(text(leaf.link) ? { link: text(leaf.link) } : {}),
         ...(toIso(leaf.due, now) ? { dueDate: toIso(leaf.due, now) } : {}),
-      });
-    });
+        ...(parent ? { parentTaskId: parent.id } : {}),
+      };
+      stages.push(stage);
+      // A leaf with "leaves" of its own is a twig (one level deep).
+      if (!parent && Array.isArray(leaf.leaves)) leaf.leaves.map(asItem).forEach((kid, kidIndex) => addLeaf(kid, kidIndex, stage));
+    };
+    (Array.isArray(branch.leaves) ? branch.leaves : []).map(asItem).forEach((leaf, leafIndex) => addLeaf(leaf, leafIndex, null));
 
     (Array.isArray(branch.fruits) ? branch.fruits : []).map(asItem).forEach((fruit, fruitIndex) => {
       const fruitName = fruit && text(fruit.name);
@@ -201,6 +208,16 @@ export const parseTreeJson = (raw, { userId, now = new Date() } = {}) => {
         ...(text(fruit.description) ? { description: text(fruit.description) } : {}),
       });
     });
+  });
+
+  // "grownFrom" names the branch it grew out of; keep it only if that branch exists.
+  const projectByName = new Map(projects.map((project) => [slug(project.title), project.id]));
+  projects.forEach((project) => {
+    if (!project.grownFrom) return;
+    const id = projectByName.get(slug(project.grownFrom));
+    if (!id || id === project.id) warnings.push(`Rama "${project.title}": no encuentro la rama "${project.grownFrom}" de la que creció.`);
+    if (id && id !== project.id) project.grownFrom = id;
+    else delete project.grownFrom;
   });
 
   if (errors.length) return { ok: false, errors };
@@ -232,6 +249,7 @@ export const parseTreeJson = (raw, { userId, now = new Date() } = {}) => {
 export const exportTreeJson = ({ purpose, roots, trunkSegments, projects, stages, achievements, connections }) => {
   const appKey = new Map((connections || []).map((app) => [app.id, app.id]));
   const rootName = new Map((roots || []).map((root) => [root.id, root.title]));
+  const branchName = new Map((projects || []).map((project) => [project.id, project.title]));
   const doc = {
     productivitree: TREE_JSON_VERSION,
     purpose: purpose || '',
@@ -252,17 +270,20 @@ export const exportTreeJson = ({ purpose, roots, trunkSegments, projects, stages
       if (project.side) branch.side = project.side;
       if (project.height !== undefined) branch.height = project.height;
       if (project.sproutedFrom) branch.sproutedFrom = project.sproutedFrom;
+      if (project.grownFrom && branchName.has(project.grownFrom)) branch.grownFrom = branchName.get(project.grownFrom);
       branch.createdAt = project.createdAt;
-      branch.leaves = (stages || [])
-        .filter((stage) => stage.projectId === project.id)
-        .map((stage) => {
-          const leaf = { name: stage.title, lastActivity: stage.lastActivityAt, done: stage.status === 'completed' };
-          if (stage.description) leaf.description = stage.description;
-          if (stage.notes) leaf.notes = stage.notes;
-          if (stage.link) leaf.link = stage.link;
-          if (stage.dueDate) leaf.due = stage.dueDate;
-          return leaf;
-        });
+      const own = (stages || []).filter((stage) => stage.projectId === project.id && !stage.deletedAt);
+      const asLeaf = (stage) => {
+        const leaf = { name: stage.title, lastActivity: stage.lastActivityAt, done: stage.status === 'completed' };
+        if (stage.description) leaf.description = stage.description;
+        if (stage.notes) leaf.notes = stage.notes;
+        if (stage.link) leaf.link = stage.link;
+        if (stage.dueDate) leaf.due = stage.dueDate;
+        const kids = own.filter((kid) => twigParent(kid, own) === stage.id);
+        if (kids.length) leaf.leaves = kids.map(asLeaf);
+        return leaf;
+      };
+      branch.leaves = own.filter((stage) => !twigParent(stage, own)).map(asLeaf);
       branch.fruits = (achievements || [])
         .filter((item) => item.projectId === project.id && typeof item.harvested === 'boolean')
         .map((item) => {

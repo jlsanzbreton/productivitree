@@ -134,7 +134,9 @@ export function createLivingTree(cv, opts) {
   function growProject(p) {
     seed = hashId(p.id);
     const a0 =
-      p.side === 0 ? UP - 0.12 + rnd(-0.05, 0.05) : UP + p.side * (p.t > 0.8 ? 0.62 : p.t > 0.6 ? 0.95 : 1.18) + rnd(-0.05, 0.05);
+      (p.side === 0 ? UP - 0.12 + rnd(-0.05, 0.05) : UP + p.side * (p.t > 0.8 ? 0.62 : p.t > 0.6 ? 0.95 : 1.18) + rnd(-0.05, 0.05)) -
+      // a branch grown from a twig rises more upright than the one beside it, so both can be told apart
+      (p.grown ? p.side * 0.4 : 0);
     const L = ((p.young ? 72 : 98) + p.prio * 14) * (p.paused ? 0.75 : 1);
     const w = (p.young ? 11 : 12) + p.prio * 3.4;
     const md = p.young ? 2 : p.prio > 3 ? 4 : 3;
@@ -200,13 +202,16 @@ export function createLivingTree(cv, opts) {
     }
     p.bbox = [bx0, by0, bx1, by1];
     const my = tips.filter((i) => i >= p.segStart && i < p.segEnd);
-    const n = p.tasks.length;
-    p.tasks.forEach((t, j) => {
+    // Leaves on the branch's own twigs; leaves of a twig (t.par) hang from it, see below.
+    const top = p.tasks.filter((t) => !t.par);
+    const n = top.length;
+    top.forEach((t, j) => {
       t.s = my[Math.floor(((j + 0.5) * my.length) / n)];
       t.off = rnd(-0.7, 0.7);
       t.sz = rnd(26, 31);
       t.ph = rnd(0, 6.28);
     });
+    growTwigs(p, top);
     p.tasks.forEach((t) => anchorTask(t));
     const used = new Set(p.tasks.map((t) => t.s));
     const free = my.filter((i) => !used.has(i));
@@ -245,6 +250,40 @@ export function createLivingTree(cv, opts) {
     });
     p.fx = [];
     p.g = g0;
+  }
+
+  /**
+   * A leaf that has leaves of its own becomes a twig: a short stem out of the leaf's tip,
+   * fanning into one sprig per child leaf. Grown after everything else so branches without
+   * twigs keep exactly the same shape.
+   */
+  function growTwigs(p, top) {
+    const before = segs.length;
+    top.forEach((t) => {
+      const kids = p.tasks.filter((c) => c.par === t.id);
+      const q = segs[t.s];
+      if (!kids.length || !q) return;
+      const away = Math.cos(q.a + t.off) >= 0 ? -1 : 1; // grow on the other side of the leaf
+      const sw = Math.max(1.6, q.w1 * 1.1);
+      const stem = segs.length;
+      const sa = q.a + away * rnd(0.3, 0.5);
+      segs.push({ par: t.s, a: sa, len: rnd(20, 26) + kids.length * 3, w0: sw, w1: sw * 0.8, d: p.md + 1, p, ph: rnd(0, 6.28), twig: 1 });
+      kids.forEach((c, k) => {
+        const spread = kids.length === 1 ? 0 : (k / (kids.length - 1) - 0.5) * Math.min(1.4, 0.45 * kids.length);
+        c.s = segs.length;
+        segs.push({ par: stem, a: sa + spread + rnd(-0.08, 0.08), len: rnd(15, 21), w0: sw * 0.8, w1: Math.max(0.9, sw * 0.55), d: p.md + 1, p, ph: rnd(0, 6.28), twig: 1 });
+        c.off = rnd(-0.6, 0.6);
+        c.sz = rnd(21, 25);
+        c.ph = rnd(0, 6.28);
+      });
+    });
+    if (segs.length === before) return;
+    p.segEnd = segs.length;
+    layout(0);
+    for (let j = before; j < segs.length; j++) {
+      const q = segs[j];
+      p.bbox = [Math.min(p.bbox[0], q.x1), Math.min(p.bbox[1], q.y1), Math.max(p.bbox[2], q.x1), Math.max(p.bbox[3], q.y1)];
+    }
   }
 
   function build() {
@@ -643,8 +682,7 @@ export function createLivingTree(cv, opts) {
     // buds on branches touched in the last two days
     P.forEach((p) => {
       if (!inc(p) || p.bud < 0.02 || p.g < 0.98) return;
-      p.tasks.forEach((t) => anchorTask(t));
-    const used = new Set(p.tasks.map((t) => t.s));
+      const used = new Set(p.tasks.map((t) => t.s));
       for (let i = p.segStart; i < p.segEnd; i++) {
         if (tips.indexOf(i) < 0 || used.has(i)) continue;
         const s = segs[i];

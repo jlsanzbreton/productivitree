@@ -3,9 +3,9 @@ import '@fontsource/caveat/500.css';
 import '@fontsource/caveat/700.css';
 import './livingTree.css';
 import { AppContext, AppContextType } from '../../contexts/AppContext';
-import { ProjectBranch } from '../../types';
+import { ProjectBranch, ProjectStageLeaf } from '../../types';
 import { confirmAction } from '../../services/desktop';
-import { buildLivingTreeModel, isFruit } from '../../utils/livingTreeModel';
+import { buildLivingTreeModel, isFruit, twigParent } from '../../utils/livingTreeModel';
 import { createLivingTree } from './livingTreeEngine';
 import TaskBench from './TaskBench';
 import SproutDialog, { SproutResult, SproutTarget } from './SproutDialog';
@@ -558,7 +558,14 @@ const LivingTreeView: React.FC<LivingTreeViewProps> = ({ onOpenArchive, onOpenDa
     const url = continueUrl(p, current, connections);
     const lastWork = Math.min(99, ...tasks.map((t) => daysSince(t.lastActivityAt)));
     const root = roots.find((r) => r.id === p.rootId);
-    const sorted = [...tasks].sort((a, b) => Number(isDone(a)) - Number(isDone(b)) || daysSince(a.lastActivityAt) - daysSince(b.lastActivityAt));
+    const byAge = (a: ProjectStageLeaf, b: ProjectStageLeaf) =>
+      Number(isDone(a)) - Number(isDone(b)) || daysSince(a.lastActivityAt) - daysSince(b.lastActivityAt);
+    // Leaves of a twig are listed right under it.
+    const parentOf = (t: ProjectStageLeaf) => twigParent(t, tasks);
+    const sorted = tasks
+      .filter((t) => !parentOf(t))
+      .sort(byAge)
+      .flatMap((t) => [t, ...tasks.filter((k) => parentOf(k) === t.id).sort(byAge)]);
     return (
       <>
         <p className="lt-crumb">
@@ -574,6 +581,7 @@ const LivingTreeView: React.FC<LivingTreeViewProps> = ({ onOpenArchive, onOpenDa
         </span>
         <p className="lt-last">
           {p.sproutedFrom ? `Brotó del fruto ${p.sproutedFrom} · ` : ''}
+          {p.grownFrom && projects.some((o) => o.id === p.grownFrom) ? `Creció de una ramita de ${projects.find((o) => o.id === p.grownFrom)?.title} · ` : ''}
           {tasks.length ? `Último trabajo ${ago(lastWork)}` : 'Sin hojas todavía'}
           {app ? ` en ${app.name}` : ''}
         </p>
@@ -603,7 +611,7 @@ const LivingTreeView: React.FC<LivingTreeViewProps> = ({ onOpenArchive, onOpenDa
                     }
                   }}
                 >
-                  <i className="lt-dot" style={{ background: c }} />
+                  <i className="lt-dot" style={{ background: c, ...(parentOf(t) ? { marginLeft: 18 } : {}) }} />
                   <span className="nm">{t.title}</span>
                   <span className="dd">{isDone(t) ? 'hecha' : ago(daysSince(t.lastActivityAt))}</span>
                 </li>
@@ -828,6 +836,17 @@ const LivingTreeView: React.FC<LivingTreeViewProps> = ({ onOpenArchive, onOpenDa
           setBranchId(pId);
           setFruitId(fId);
           setPanel('fruit');
+        }}
+        onOpenTask={(tId) => {
+          setLeafId(tId);
+          setBenchOpen(true);
+        }}
+        onPromoted={(newBranchId) => {
+          // zoom out so the new branch can be seen growing out of the trunk
+          setBenchOpen(false);
+          setLeafId(null);
+          engineRef.current?.zoomTo(null);
+          openBranch(newBranchId);
         }}
       />
       <SproutDialog target={sprout} onClose={() => setSprout(null)} onDone={onSprouted} />
