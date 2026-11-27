@@ -8,7 +8,7 @@ export const TREE_JSON_VERSION = 1;
 const DAY = 24 * 60 * 60 * 1000;
 const STATUSES = ['active', 'paused', 'completed'];
 const SIDES = ['left', 'right', 'center'];
-const KINDS = ['webapp', 'bear', 'github', 'docs', 'other'];
+const KINDS = ['webapp', 'bear', 'github', 'docs', 'other', 'writerslens', 'youtube'];
 
 const slug = (value) =>
   String(value)
@@ -111,7 +111,8 @@ export const parseTreeJson = (raw, { userId, now = new Date() } = {}) => {
       name,
       kind: KINDS.includes(item.kind) ? item.kind : 'other',
       openUrl: text(item.openUrl),
-      tracking: item.tracking === 'link' ? 'link' : 'manual',
+      tracking: ['link', 'auto'].includes(item.tracking) ? item.tracking : 'manual',
+      ...(text(item.channelId) ? { channelId: text(item.channelId) } : {}),
       createdAt: stamp,
     };
   });
@@ -240,7 +241,7 @@ export const exportTreeJson = ({ purpose, roots, trunkSegments, projects, stages
     experience: (trunkSegments || []).map((segment) =>
       segment.description ? { name: segment.title, description: segment.description } : segment.title
     ),
-    apps: (connections || []).map(({ id, name, kind, openUrl, tracking }) => ({ id, name, kind, openUrl, tracking })),
+    apps: (connections || []).map(({ id, name, kind, openUrl, tracking, channelId }) => ({ id, name, kind, openUrl, tracking, ...(channelId ? { channelId } : {}) })),
     branches: (projects || []).map((project) => {
       const branch = { name: project.title };
       if (project.description) branch.description = project.description;

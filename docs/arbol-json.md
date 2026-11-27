@@ -41,7 +41,7 @@ Importar **reemplaza** el árbol actual (ramas, hojas, frutos, pasiones, experie
 | `purpose` | El sol del árbol: para qué es todo. |
 | `passions` | Raíces. Texto o `{ name, description }`. |
 | `experience` | Tramos del tronco (se muestran hasta 5). Texto o `{ name, description }`. |
-| `apps` | Dónde se trabaja. `kind`: `webapp`, `bear`, `github`, `docs` u `other`. `openUrl` admite `{rama}`, `{tarea}` y `{etiqueta}`. `tracking`: `manual` o `link`. |
+| `apps` | Dónde se trabaja. `kind`: `webapp`, `bear`, `github`, `docs`, `writerslens`, `youtube` u `other`. `openUrl` admite `{rama}`, `{tarea}` y `{etiqueta}`. `tracking`: `manual`, `link` o `auto` (la app de Mac la consulta sola: Writer's Lens y YouTube). En YouTube, `channelId` es el ID del canal (UC…). |
 | `branches[].name` | Obligatorio. Una rama es un proyecto. |
 | `priority` | 1 a 5: el grosor de la rama. |
 | `status` | `active`, `paused` o `completed` (las cerradas van al archivo). |

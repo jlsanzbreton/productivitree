@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local env (Writer's Lens keys for the Mac app)
+.env.local
+.env.*.local

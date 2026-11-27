@@ -6,6 +6,9 @@ import TreeDataDialog from './components/LivingTree/TreeDataDialog';
 import ConnectAppsWizard from './components/LivingTree/ConnectAppsWizard';
 import { EXAMPLE_TREE } from './components/LivingTree/exampleTree';
 import QuickWaterDialog from './components/LivingTree/QuickWaterDialog';
+import SourceAskDialog from './components/LivingTree/SourceAskDialog';
+import { SourceQuestion, useAutoSources } from './components/LivingTree/useAutoSources';
+import { finishWritersLensSignIn } from './services/writersLens';
 import { activitySearchFromUrl, parseActivityParams } from './utils/activityLink';
 import { listenDesktopLinks, listenQuickLogShortcut } from './services/desktop';
 import { parseTreeJson } from './utils/treeJson';
@@ -57,6 +60,7 @@ const App: React.FC = () => {
   const [dataDialog, setDataDialog] = useState<{ text: string } | null>(null);
   const [showConnect, setShowConnect] = useState(false);
   const [showQuickWater, setShowQuickWater] = useState(false);
+  const [questions, setQuestions] = useState<SourceQuestion[]>([]);
   const [toast, setToast] = useState<string | null>(null);
   const [focusRequest, setFocusRequest] = useState<{ projectId: string; taskId?: string; nonce: number } | null>(null);
   const [viewMode, setViewMode] = useState<TreeViewMode>(readStoredViewMode);
@@ -117,6 +121,16 @@ const App: React.FC = () => {
       setFocusRequest({ projectId: result.projectId, taskId: result.taskId, nonce: Date.now() });
     }
   };
+  // Mac app: Writer's Lens and YouTube water the tree on their own.
+  const { runNow: checkSources } = useAutoSources({
+    onToast: setToast,
+    onAsk: (question) => setQuestions((prev) => [...prev, question]),
+  });
+  const answerQuestion = (result?: { ok: boolean; message: string; projectId?: string; taskId?: string }) => {
+    setQuestions((prev) => prev.slice(1));
+    if (result) showActivityResult(result);
+  };
+
   // Latest handler for listeners registered once.
   const handleActivityRef = useRef(handleActivity);
   handleActivityRef.current = handleActivity;
@@ -129,7 +143,18 @@ const App: React.FC = () => {
     }
     const stopLinks = listenDesktopLinks((url) => {
       const search = activitySearchFromUrl(url);
-      if (search) handleActivityRef.current(search);
+      if (search) {
+        handleActivityRef.current(search);
+        return;
+      }
+      // Back from signing in to Writer's Lens in the browser.
+      finishWritersLensSignIn(url)
+        .then((result) => {
+          if (!result.handled) return;
+          setToast(result.message || '');
+          if (result.ok) void checkSources();
+        })
+        .catch((error) => setToast(error instanceof Error ? error.message : String(error)));
     });
     const stopShortcut = listenQuickLogShortcut(() => setShowQuickWater(true));
     return () => {
@@ -201,6 +226,7 @@ const App: React.FC = () => {
         onClose={() => setDataDialog(null)}
       />
       <ConnectAppsWizard isOpen={showConnect} onClose={() => setShowConnect(false)} />
+      <SourceAskDialog question={questions[0] || null} onClose={() => answerQuestion()} onDone={answerQuestion} />
       <QuickWaterDialog
         isOpen={showQuickWater}
         onClose={() => setShowQuickWater(false)}
