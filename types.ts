@@ -65,8 +65,23 @@ export interface ActivityEntry {
   url?: string;
 }
 
-export type AppConnectionKind = 'webapp' | 'bear' | 'github' | 'docs' | 'other';
-export type AppTrackingMode = 'manual' | 'link';
+export type AppConnectionKind = 'webapp' | 'bear' | 'github' | 'docs' | 'other' | 'writerslens' | 'youtube';
+/** manual: you log it; link: the app opens an activity link; auto: Productivitree checks the app itself. */
+export type AppTrackingMode = 'manual' | 'link' | 'auto';
+
+/** What an automatic source remembers between checks (Mac app). */
+export interface AppSourceState {
+  /** When it was last checked. */
+  checkedAt?: string;
+  /** Last problem, shown in the apps list. */
+  error?: string;
+  /** YouTube: videos already turned into fruits. */
+  seenVideos?: string[];
+  /** Writer's Lens: section id → content hash and word count at the last check. */
+  sections?: Record<string, { h: string; w: number }>;
+  /** Writer's Lens: project id → branch id it waters ('' = none). Asked the first time. */
+  projectBranch?: Record<string, string>;
+}
 
 /** An app the user works in, set up with the connect-apps wizard. */
 export interface AppConnection {
@@ -77,6 +92,10 @@ export interface AppConnection {
   openUrl: string;
   tracking: AppTrackingMode;
   createdAt: string;
+  /** YouTube channel id (UC…), for kind 'youtube'. */
+  channelId?: string;
+  /** Automatic sources only. */
+  sourceState?: AppSourceState;
 }
 
 export enum LeafStatus {

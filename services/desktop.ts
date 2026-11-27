@@ -133,3 +133,6 @@ export const listenQuickLogShortcut = (onPress: () => void): (() => void) => {
     stop?.();
   };
 };
+
+/** Public feed (Atom XML) of a YouTube channel, read by the Mac app. */
+export const fetchYoutubeFeed = (channelId: string): Promise<string> => invoke<string>('fetch_youtube_feed', { channelId });

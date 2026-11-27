@@ -32,6 +32,15 @@ Requisitos: Rust (`rustup`) y las herramientas de Xcode, como en Memorice y Cue.
 2. `npm run mac:dev` para probarla, o `npm run mac:build` para crear `Productivitree.app` y el `.dmg`
    en `src-tauri/target/release/bundle/`.
 
+### Fuentes automáticas (Ajustes → Tus apps → Conectar una app)
+- **YouTube**: pon el ID del canal (UC…). Cada 15 minutos la app lee su lista pública de vídeos y cada
+  vídeo nuevo aparece como fruto recogido en la rama marcada. Sin claves.
+- **Writer's Lens**: crea `.env.local` a partir de `.env.example` con la URL y la clave publicable del
+  proyecto de Supabase de Writer's Lens. En Supabase → Authentication → URL Configuration añade
+  `productivitree://auth` a *Redirect URLs*. Luego, en el asistente, «Conectar con GitHub». Cada 15
+  minutos se mira qué secciones cambiaron (solo nombres y huella del texto, nunca el texto) y se riega
+  la hoja del proyecto. La primera vez pregunta «¿Estabas con…?» y puede recordarlo.
+
 Los enlaces `productivitree://` solo funcionan con la app construida e instalada (macOS los asocia al
 abrirla una vez desde Aplicaciones). Para pasar tu árbol del navegador a la app: Ajustes → Copias de
 seguridad → descarga la copia en la web y restáurala en la app.

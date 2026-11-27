@@ -5,6 +5,8 @@ import { AppContext, AppContextType } from '../../contexts/AppContext';
 import { AppConnection, AppConnectionKind, AppTrackingMode } from '../../types';
 import { DESKTOP_ACTIVITY_ORIGIN, buildActivityLink, fillUrlTemplate, isSafeOpenUrl } from '../../utils/activityLink';
 import { isDesktop } from '../../services/desktop';
+import { connectWritersLens, disconnectWritersLens, writersLensAccount, writersLensConfigured } from '../../services/writersLens';
+import { parseYoutubeChannelId } from '../../utils/sources';
 import { openExternal } from './treeHelpers';
 
 const PRESETS: Array<{ kind: AppConnectionKind; name: string; hint: string; url: string }> = [
@@ -12,13 +14,19 @@ const PRESETS: Array<{ kind: AppConnectionKind; name: string; hint: string; url:
   { kind: 'bear', name: 'Bear', hint: 'Notas con etiquetas por proyecto', url: 'bear://x-callback-url/search?tag={etiqueta}' },
   { kind: 'github', name: 'GitHub', hint: 'Repositorios de código', url: 'https://github.com/' },
   { kind: 'docs', name: 'Google Docs', hint: 'Documentos compartidos', url: 'https://docs.google.com/document/u/0/?q={rama}' },
+  { kind: 'writerslens', name: 'Writer’s Lens', hint: 'Tu app de escritura: se riega sola', url: 'https://' },
+  { kind: 'youtube', name: 'YouTube', hint: 'Tu canal: cada vídeo publicado es un fruto', url: '' },
   { kind: 'other', name: '', hint: 'Cualquier app que se abra con un enlace', url: '' },
 ];
 
+/** Kinds that Productivitree checks on its own (Mac app). */
+const AUTO_KINDS: AppConnectionKind[] = ['writerslens', 'youtube'];
+const studioUrl = (channelId: string) => `https://studio.youtube.com/channel/${channelId}`;
+
 const STEP_TITLES = ['Elige la app', 'Cómo se abre', 'Cómo se anota lo que haces', 'En qué ramas la usas'];
 
-type Draft = { id?: string; kind: AppConnectionKind; name: string; openUrl: string; tracking: AppTrackingMode; branchIds: string[] };
-const emptyDraft = (): Draft => ({ kind: 'webapp', name: '', openUrl: 'https://', tracking: 'manual', branchIds: [] });
+type Draft = { id?: string; kind: AppConnectionKind; name: string; openUrl: string; tracking: AppTrackingMode; branchIds: string[]; channelId: string };
+const emptyDraft = (): Draft => ({ kind: 'webapp', name: '', openUrl: 'https://', tracking: 'manual', branchIds: [], channelId: '' });
 
 /** Step by step set-up of the apps where the work happens: how to open them and how they report activity. */
 const ConnectAppsWizard: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
@@ -26,6 +34,9 @@ const ConnectAppsWizard: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
   const [step, setStep] = useState(-1);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [copied, setCopied] = useState(false);
+  const [wlAccount, setWlAccount] = useState<string | null>(null);
+  const [wlBusy, setWlBusy] = useState(false);
+  const [wlMsg, setWlMsg] = useState('');
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -37,7 +48,14 @@ const ConnectAppsWizard: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
     // Open fresh each time the wizard is shown.
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen || draft.kind !== 'writerslens') return;
+    writersLensAccount().then(setWlAccount).catch(() => setWlAccount(null));
+  }, [isOpen, draft.kind, step]);
+
   if (!isOpen) return null;
+  const isAuto = AUTO_KINDS.includes(draft.kind);
+  const channelId = parseYoutubeChannelId(draft.channelId);
 
   // In the Mac app, links go to the app itself (productivitree://), not to a web address.
   const origin = isDesktop() ? DESKTOP_ACTIVITY_ORIGIN : typeof window !== 'undefined' ? window.location.origin : 'https://productivitree.app';
@@ -45,7 +63,30 @@ const ConnectAppsWizard: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
   const activityLink = buildActivityLink(origin, { app: draft.name || 'Mi app' });
   const sampleLink = sample ? buildActivityLink(origin, { branch: sample.title, task: 'Nombre de la tarea', app: draft.name || 'Mi app' }) : '';
   const testUrl = fillUrlTemplate(draft.openUrl, { branch: sample?.title || 'Mi proyecto', task: 'Primera tarea' });
-  const canNext = step === 0 ? true : step === 1 ? Boolean(draft.name.trim()) && (!draft.openUrl.trim() || isSafeOpenUrl(draft.openUrl)) : true;
+  const canNext =
+    step === 0
+      ? true
+      : step === 1
+        ? Boolean(draft.name.trim()) && (!draft.openUrl.trim() || isSafeOpenUrl(draft.openUrl)) && (draft.kind !== 'youtube' || Boolean(channelId))
+        : true;
+
+  const connectWl = async () => {
+    setWlBusy(true);
+    setWlMsg('');
+    try {
+      await connectWritersLens();
+      setWlMsg('Se ha abierto el navegador: entra con GitHub y vuelve aquí.');
+    } catch (error) {
+      setWlMsg(error instanceof Error ? error.message : String(error));
+    } finally {
+      setWlBusy(false);
+    }
+  };
+  const disconnectWl = async () => {
+    await disconnectWritersLens();
+    setWlAccount(null);
+    setWlMsg('Desconectado.');
+  };
 
   const edit = (app: AppConnection) => {
     setDraft({
@@ -55,12 +96,21 @@ const ConnectAppsWizard: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
       openUrl: app.openUrl,
       tracking: app.tracking,
       branchIds: projects.filter((p) => p.appId === app.id).map((p) => p.id),
+      channelId: app.channelId || '',
     });
     setStep(1);
   };
 
   const save = () => {
-    const id = saveConnection({ id: draft.id, kind: draft.kind, name: draft.name.trim(), openUrl: draft.openUrl.trim(), tracking: draft.tracking });
+    const openUrl = draft.kind === 'youtube' && channelId ? studioUrl(channelId) : draft.openUrl.trim();
+    const id = saveConnection({
+      id: draft.id,
+      kind: draft.kind,
+      name: draft.name.trim(),
+      openUrl,
+      tracking: isAuto ? 'auto' : draft.tracking,
+      ...(draft.kind === 'youtube' && channelId ? { channelId } : {}),
+    });
     projects.forEach((p) => {
       const wants = draft.branchIds.includes(p.id);
       if (wants && p.appId !== id) updateProjectBranch({ ...p, appId: id });
@@ -105,7 +155,12 @@ const ConnectAppsWizard: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
                     <span className="nm">
                       {app.name}
                       <span className="dd" style={{ display: 'block' }}>
-                        {projects.filter((p) => p.appId === app.id).length} ramas · {app.tracking === 'link' ? 'avisa con enlace' : 'anotas a mano'}
+                        {projects.filter((p) => p.appId === app.id).length} ramas ·{' '}
+                        {app.tracking === 'auto' ? 'se riega sola' : app.tracking === 'link' ? 'avisa con enlace' : 'anotas a mano'}
+                        {app.tracking === 'auto' && app.sourceState?.error ? <span style={{ color: '#b8432f' }}> · {app.sourceState.error}</span> : null}
+                        {app.tracking === 'auto' && !app.sourceState?.error && app.sourceState?.checkedAt ? (
+                          <> · mirado {new Date(app.sourceState.checkedAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</>
+                        ) : null}
                       </span>
                     </span>
                     <span className="lt-row-acts">
@@ -146,7 +201,15 @@ const ConnectAppsWizard: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
                   key={preset.kind}
                   type="button"
                   className={`lt-choice${draft.kind === preset.kind ? ' on' : ''}`}
-                  onClick={() => setDraft((d) => ({ ...d, kind: preset.kind, name: preset.name || (d.kind === preset.kind ? d.name : ''), openUrl: preset.url }))}
+                  onClick={() =>
+                    setDraft((d) => ({
+                      ...d,
+                      kind: preset.kind,
+                      name: preset.name || (d.kind === preset.kind ? d.name : ''),
+                      openUrl: preset.url,
+                      tracking: AUTO_KINDS.includes(preset.kind) ? 'auto' : d.tracking === 'auto' ? 'manual' : d.tracking,
+                    }))
+                  }
                 >
                   <b>{preset.kind === 'webapp' ? 'App web' : preset.kind === 'other' ? 'Otra' : preset.name}</b>
                   <span>{preset.hint}</span>
@@ -162,10 +225,21 @@ const ConnectAppsWizard: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
               Nombre
               <input value={draft.name} maxLength={40} placeholder="Por ejemplo: mi editor de textos" onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
             </label>
-            <label className="lt-field">
-              Enlace para abrirla
-              <input value={draft.openUrl} placeholder="https://…" onChange={(e) => setDraft({ ...draft, openUrl: e.target.value })} />
-            </label>
+            {draft.kind === 'youtube' ? (
+              <>
+                <label className="lt-field">
+                  ID del canal
+                  <input value={draft.channelId} placeholder="UC…" onChange={(e) => setDraft({ ...draft, channelId: e.target.value })} />
+                </label>
+                <p className="lt-note">Empieza por UC (o pega el enlace del canal). «Continuar» abrirá YouTube Studio.</p>
+                {draft.channelId.trim() && !channelId && <div className="lt-msg err">Ese ID no parece de un canal.</div>}
+              </>
+            ) : (
+              <label className="lt-field">
+                Enlace para abrirla
+                <input value={draft.openUrl} placeholder="https://…" onChange={(e) => setDraft({ ...draft, openUrl: e.target.value })} />
+              </label>
+            )}
             <p className="lt-note">
               Puedes usar {'{rama}'}, {'{tarea}'} y {'{etiqueta}'}: se cambian por el proyecto y la tarea al pulsar «Continuar». Cada hoja puede además
               llevar su propio enlace directo.
@@ -182,7 +256,48 @@ const ConnectAppsWizard: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
           </>
         )}
 
-        {step === 2 && (
+        {step === 2 && draft.kind === 'youtube' && (
+          <>
+            <p className="lt-sub">Se riega sola.</p>
+            <p className="lt-note">
+              La app de Mac mira el canal cada 15 minutos (su lista pública de vídeos, sin claves ni contraseñas). Cada vídeo nuevo aparece como fruto
+              recogido en la rama que marques en el paso siguiente.
+            </p>
+            {!isDesktop() && <div className="lt-msg err">Esto funciona en la app de Mac; en el navegador no se consulta.</div>}
+          </>
+        )}
+
+        {step === 2 && draft.kind === 'writerslens' && (
+          <>
+            <p className="lt-sub">Se riega sola.</p>
+            <p className="lt-note">
+              Cada 15 minutos la app mira qué secciones cambiaron en Writer’s Lens y riega la hoja de ese proyecto (con el nombre de la sección y las
+              palabras nuevas). Solo lee nombres y una huella del texto, nunca el texto. La primera vez que escribas en un proyecto te preguntará a qué
+              rama pertenece.
+            </p>
+            {!isDesktop() ? (
+              <div className="lt-msg err">Esto funciona en la app de Mac.</div>
+            ) : !writersLensConfigured() ? (
+              <div className="lt-msg err">Falta configurar Writer’s Lens en esta copia de la app (ver README).</div>
+            ) : wlAccount ? (
+              <p className="lt-note">
+                Conectado como <b>{wlAccount}</b>.{' '}
+                <button className="lt-link" onClick={disconnectWl}>
+                  Desconectar
+                </button>
+              </p>
+            ) : (
+              <div className="lt-acts">
+                <button className="lt-btn sprout full" disabled={wlBusy} onClick={connectWl}>
+                  Conectar con GitHub (tu cuenta de Writer’s Lens)
+                </button>
+              </div>
+            )}
+            {wlMsg && <p className="lt-note">{wlMsg}</p>}
+          </>
+        )}
+
+        {step === 2 && !isAuto && (
           <>
             <div className="lt-choices">
               <button type="button" className={`lt-choice${draft.tracking === 'manual' ? ' on' : ''}`} onClick={() => setDraft({ ...draft, tracking: 'manual' })}>

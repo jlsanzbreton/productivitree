@@ -3,7 +3,7 @@
 //! The web app runs unchanged inside the window. This shell adds what a browser tab
 //! cannot do: keep the tree in a file on the Mac, receive `productivitree://` activity
 //! links from other apps, and listen to a global keyboard shortcut for quick logging.
-//! Nothing here talks to the network.
+//! The only network call is reading a YouTube channel's public feed, on request.
 
 use std::fs;
 use std::io::ErrorKind;
@@ -78,6 +78,35 @@ fn is_safe_external_url(url: &str) -> bool {
     valid && !rest.is_empty() && !["javascript", "data", "vbscript", "file", "blob"].contains(&scheme.as_str())
 }
 
+fn is_youtube_channel_id(id: &str) -> bool {
+    id.len() == 24 && id.starts_with("UC") && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+/// Reads the public feed of a YouTube channel (latest videos). No account or key needed.
+/// Done here because the page cannot read youtube.com directly (CORS).
+#[tauri::command]
+async fn fetch_youtube_feed(channel_id: String) -> Result<String, String> {
+    if !is_youtube_channel_id(&channel_id) {
+        return Err("El ID del canal no es válido (empieza por UC y tiene 24 caracteres).".into());
+    }
+    let url = format!("https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}");
+    tauri::async_runtime::spawn_blocking(move || {
+        let response = ureq::get(&url)
+            .timeout(std::time::Duration::from_secs(20))
+            .call()
+            .map_err(|e| match e {
+                ureq::Error::Status(404, _) => "YouTube no encuentra ese canal (¿aún sin vídeos públicos?).".to_string(),
+                other => format!("No se pudo leer YouTube: {other}"),
+            })?;
+        let mut body = String::new();
+        let mut limited = std::io::Read::take(response.into_reader(), 2_000_000);
+        std::io::Read::read_to_string(&mut limited, &mut body).map_err(|e| e.to_string())?;
+        Ok(body)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 fn show_main(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
         let _ = window.unminimize();
@@ -105,7 +134,7 @@ pub fn run() {
                 })
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![load_state, save_state, data_location, open_external])
+        .invoke_handler(tauri::generate_handler![load_state, save_state, data_location, open_external, fetch_youtube_feed])
         .setup(|app| {
             let handle = app.handle().clone();
             // The page reads the links itself (plugin JS API); here we only bring the window forward.
@@ -140,7 +169,15 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::is_safe_external_url;
+    use super::{is_safe_external_url, is_youtube_channel_id};
+
+    #[test]
+    fn validates_youtube_channel_ids() {
+        assert!(is_youtube_channel_id("UC0YXv_iSslCc19Q-uqb3kBA"));
+        assert!(!is_youtube_channel_id("UC0YXv_iSslCc19Q-uqb3kB"));
+        assert!(!is_youtube_channel_id("UC0YXv_iSslCc19Q-uqb3k&A"));
+        assert!(!is_youtube_channel_id("XX0YXv_iSslCc19Q-uqb3kBA"));
+    }
 
     #[test]
     fn opens_web_and_app_links_only() {

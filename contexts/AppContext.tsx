@@ -136,6 +136,8 @@ export interface AppContextType {
   connections: AppConnection[];
   saveConnection: (connection: Omit<AppConnection, 'id' | 'createdAt'> & { id?: string }) => string;
   removeConnection: (connectionId: string) => void;
+  /** Merges into an automatic source's memory (last check, seen videos, …). */
+  patchSourceState: (connectionId: string, patch: Partial<NonNullable<AppConnection['sourceState']>>) => void;
   removeExampleParts: (parts: { purpose: boolean; rootIds: string[]; trunkIds: string[]; branchIds: string[]; appIds: string[] }) => void;
   history: HistoryEntry[];
   /** Everything, including archived (deleted) items. */
@@ -583,7 +585,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const id = connection.id || newId('app');
     setConnections((prev) => {
       const existing = prev.find((item) => item.id === id);
-      const next: AppConnection = { ...connection, id, createdAt: existing?.createdAt || new Date().toISOString() };
+      // Keep what automatic sources remember (sourceState) when the wizard edits a connection.
+      const next: AppConnection = { ...existing, ...connection, id, createdAt: existing?.createdAt || new Date().toISOString() };
       return existing ? prev.map((item) => (item.id === id ? next : item)) : [...prev, next];
     });
     return id;
@@ -592,6 +595,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const removeConnection = useCallback((connectionId: string) => {
     setConnections((prev) => prev.filter((item) => item.id !== connectionId));
     setProjects((prev) => prev.map((item) => (item.appId === connectionId ? { ...item, appId: undefined } : item)));
+  }, []);
+
+  const patchSourceState = useCallback((connectionId: string, patch: Partial<NonNullable<AppConnection['sourceState']>>) => {
+    setConnections((prev) =>
+      prev.map((item) => (item.id === connectionId ? { ...item, sourceState: { ...item.sourceState, ...patch } } : item))
+    );
   }, []);
 
   // Quietly removes the untouched parts of the first-run example tree (not logged: they were never the person's).
@@ -1145,6 +1154,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         connections,
         saveConnection,
         removeConnection,
+        patchSourceState,
         removeExampleParts,
         history,
         sproutBranch,
