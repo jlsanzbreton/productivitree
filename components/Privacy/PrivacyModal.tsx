@@ -1,17 +1,36 @@
 import { createPortal } from 'react-dom';
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import '../LivingTree/livingTree.css';
-import { AppContext, AppContextType } from '../../contexts/AppContext';
+import { AppContext, AppContextType, BackupSummary } from '../../contexts/AppContext';
 import { TESTER_FEEDBACK_URL } from '../../constants';
 
 /** Settings: privacy switches, a full backup and the two "start again" buttons. */
 const PrivacyModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
-  const { consent, setAiReflectionConsent, privacySettings, setPrivacySettings, exportAllData, deleteAllData } = useContext(AppContext) as AppContextType;
+  const {
+    consent,
+    setAiReflectionConsent,
+    privacySettings,
+    setPrivacySettings,
+    exportAllData,
+    deleteAllData,
+    downloadBackup,
+    previewBackup,
+    restoreFromBackup,
+    lastBackupAt,
+    storagePersisted,
+  } = useContext(AppContext) as AppContextType;
   const [status, setStatus] = useState<string | null>(null);
+  const [backupError, setBackupError] = useState<string | null>(null);
+  const [pendingRestore, setPendingRestore] = useState<{ text: string; summary: BackupSummary } | null>(null);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const formatDate = (iso: string | null) => (iso ? new Date(iso).toLocaleString('es-ES') : 'fecha desconocida');
 
   useEffect(() => {
     if (!isOpen) return undefined;
     setStatus(null);
+    setBackupError(null);
+    setPendingRestore(null);
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -24,6 +43,42 @@ const PrivacyModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOp
       () => setStatus('Copia de seguridad copiada al portapapeles. Pégala en un archivo para guardarla.'),
       () => setStatus('No se pudo copiar. Prueba otra vez.')
     );
+  };
+
+  const handleDownloadBackup = async () => {
+    setBackupError(null);
+    try {
+      await downloadBackup();
+      setStatus('Copia descargada. Guárdala en un sitio seguro, por ejemplo iCloud Drive.');
+    } catch (_error) {
+      setBackupError('No se pudo crear el archivo de copia.');
+    }
+  };
+
+  const handleFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setStatus(null);
+    setBackupError(null);
+    try {
+      const text = await file.text();
+      setPendingRestore({ text, summary: previewBackup(text) });
+    } catch (error) {
+      setPendingRestore(null);
+      setBackupError(error instanceof Error ? error.message : 'No se pudo leer el archivo de copia.');
+    }
+  };
+
+  const handleConfirmRestore = async () => {
+    if (!pendingRestore) return;
+    setIsRestoring(true);
+    try {
+      await restoreFromBackup(pendingRestore.text);
+    } catch (error) {
+      setIsRestoring(false);
+      setBackupError(error instanceof Error ? error.message : 'No se pudo restaurar la copia.');
+    }
   };
 
   return createPortal(
@@ -60,10 +115,46 @@ const PrivacyModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOp
           </label>
         </div>
 
+        <h3>Copias de seguridad</h3>
+        <p className="lt-plain">Última copia: {lastBackupAt ? formatDate(lastBackupAt) : 'nunca'}</p>
+        <p className="lt-note">
+          {storagePersisted === true
+            ? 'Tu navegador ha aceptado conservar estos datos.'
+            : 'El navegador puede borrar estos datos (Safari, por ejemplo, tras 7 días sin abrir Productivitree). Añadir la app al Dock (Archivo > Añadir al Dock en Safari) y descargar copias de vez en cuando los mantiene a salvo.'}
+        </p>
+        <div className="lt-acts">
+          <button className="lt-btn sprout" onClick={handleDownloadBackup}>
+            Descargar una copia
+          </button>
+          <button className="lt-btn" onClick={() => fileInputRef.current?.click()}>
+            Restaurar desde archivo
+          </button>
+          <input ref={fileInputRef} type="file" accept="application/json,.json" hidden onChange={handleFileSelected} />
+        </div>
+        {pendingRestore && (
+          <div className="lt-msg err" role="alert">
+            Copia del {formatDate(pendingRestore.summary.exportedAt)} con {pendingRestore.summary.projects} ramas, {pendingRestore.summary.stages} tareas y{' '}
+            {pendingRestore.summary.roots} raíces. Restaurarla reemplaza todo lo que hay ahora en este navegador.
+            <div className="lt-acts">
+              <button className="lt-btn" onClick={() => setPendingRestore(null)} disabled={isRestoring}>
+                Cancelar
+              </button>
+              <button className="lt-btn danger" onClick={handleConfirmRestore} disabled={isRestoring}>
+                {isRestoring ? 'Restaurando…' : 'Reemplazar mis datos'}
+              </button>
+            </div>
+          </div>
+        )}
+        {backupError && (
+          <div className="lt-msg err" role="alert">
+            {backupError}
+          </div>
+        )}
+
         <h3>Tus datos</h3>
         <div className="lt-acts" style={{ marginTop: 0 }}>
           <button className="lt-btn full" onClick={copyBackup}>
-            Copiar una copia de seguridad completa
+            Copiar todos los datos al portapapeles
           </button>
           <button
             className="lt-btn danger full"
