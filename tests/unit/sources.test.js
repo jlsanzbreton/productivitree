@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { describeWritersLensEdit, diffWritersLens, newVideos, parseYoutubeChannelId, parseYoutubeFeed } from '../../utils/sources.js';
+import { describeWritersLensEdit, diffWritersLens, mergeDuplicateSources, newVideos, parseYoutubeChannelId, parseYoutubeFeed } from '../../utils/sources.js';
 
 const FEED = `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns="http://www.w3.org/2005/Atom">
@@ -66,4 +66,21 @@ test('only sections whose text changed count as written', () => {
   assert.deepEqual(myth.sections, ['Sección s2', 'Sección s3']);
   assert.equal(myth.words, 50);
   assert.equal(describeWritersLensEdit(myth), 'Escribiste en «Sección s2», «Sección s3» (+50 palabras)');
+});
+
+test('two Writer’s Lens connections become one, keeping branches and answers', () => {
+  const connections = [
+    { id: 'a', kind: 'writerslens', tracking: 'auto', openUrl: '', createdAt: '2026-11-27T10:00:00Z', sourceState: { projectBranch: { p1: 'b1' }, sections: { s: { h: 'x', w: 1 } } } },
+    { id: 'bear', kind: 'bear', tracking: 'manual', openUrl: 'bear://', createdAt: '2026-11-27T10:00:00Z' },
+    { id: 'b', kind: 'writerslens', tracking: 'auto', openUrl: 'https://wl.example', createdAt: '2026-11-27T11:00:00Z', sourceState: { projectBranch: { p2: '' } } },
+  ];
+  const projects = [{ id: 'b1', appId: 'b' }, { id: 'b2', appId: 'bear' }];
+  const result = mergeDuplicateSources(connections, projects);
+  assert.equal(result.changed, true);
+  assert.deepEqual(result.connections.map((c) => c.id), ['bear', 'b']);
+  const kept = result.connections.find((c) => c.id === 'b');
+  assert.deepEqual(kept.sourceState.projectBranch, { p1: 'b1', p2: '' });
+  assert.ok(kept.sourceState.sections.s);
+  assert.equal(kept.openUrl, 'https://wl.example');
+  assert.equal(mergeDuplicateSources(result.connections, result.projects).changed, false);
 });

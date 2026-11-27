@@ -36,19 +36,30 @@ const autoKindFor = (app: AppConnection): AppConnectionKind | null => {
 
 const STEP_TITLES = ['Elige la app', 'Cómo se abre', 'Cómo se anota lo que haces', 'En qué ramas la usas'];
 
-type Draft = { id?: string; kind: AppConnectionKind; name: string; openUrl: string; tracking: AppTrackingMode; branchIds: string[]; channelId: string };
-const emptyDraft = (): Draft => ({ kind: 'webapp', name: '', openUrl: 'https://', tracking: 'manual', branchIds: [], channelId: '' });
+type Draft = {
+  id?: string;
+  kind: AppConnectionKind;
+  name: string;
+  openUrl: string;
+  tracking: AppTrackingMode;
+  branchIds: string[];
+  channelId: string;
+  /** Writer's Lens: project id → branch id ('' = none). Missing = ask the first time. */
+  projectBranch: Record<string, string>;
+};
+const emptyDraft = (): Draft => ({ kind: 'webapp', name: '', openUrl: 'https://', tracking: 'manual', branchIds: [], channelId: '', projectBranch: {} });
+type WlProject = { id: string; name: string; words: number };
 
 /** Step by step set-up of the apps where the work happens: how to open them and how they report activity. */
 const ConnectAppsWizard: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
-  const { connections, projects, saveConnection, removeConnection, updateProjectBranch } = useContext(AppContext) as AppContextType;
+  const { connections, projects, saveConnection, removeConnection, updateProjectBranch, patchSourceState } = useContext(AppContext) as AppContextType;
   const [step, setStep] = useState(-1);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [copied, setCopied] = useState(false);
   const [wlAccount, setWlAccount] = useState<string | null>(null);
   const [wlBusy, setWlBusy] = useState(false);
   const [wlMsg, setWlMsg] = useState('');
-  const [wlProjects, setWlProjects] = useState<string[] | null>(null);
+  const [wlProjects, setWlProjects] = useState<WlProject[] | null>(null);
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -70,7 +81,16 @@ const ConnectAppsWizard: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
           setWlAccount(account);
           if (!account) return setWlProjects(null);
           // Shows which projects it can see, so it is clear the connection works.
-          return readWritersLens().then((rows) => alive && setWlProjects([...new Set(rows.map((r) => r.projectName))]));
+          return readWritersLens().then((rows) => {
+            if (!alive) return;
+            const byId = new Map<string, WlProject>();
+            rows.forEach((r) => {
+              const item = byId.get(r.projectId) || { id: r.projectId, name: r.projectName, words: 0 };
+              item.words += r.words;
+              byId.set(r.projectId, item);
+            });
+            setWlProjects([...byId.values()]);
+          });
         })
         .catch(() => alive && setWlProjects(null));
     void refresh();
@@ -126,6 +146,7 @@ const ConnectAppsWizard: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
       tracking: makeAuto ? 'auto' : app.tracking,
       branchIds: projects.filter((p) => p.appId === app.id).map((p) => p.id),
       channelId: app.channelId || '',
+      projectBranch: { ...(app.sourceState?.projectBranch || {}) },
     });
     // Writer's Lens goes straight to "Conectar con GitHub"; YouTube first needs the channel ID.
     setStep((makeAuto || app.kind) === 'writerslens' ? 2 : 1);
@@ -141,6 +162,7 @@ const ConnectAppsWizard: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
       tracking: isAuto ? 'auto' : draft.tracking,
       ...(draft.kind === 'youtube' && channelId ? { channelId } : {}),
     });
+    if (draft.kind === 'writerslens') patchSourceState(id, { projectBranch: draft.projectBranch });
     projects.forEach((p) => {
       const wants = draft.branchIds.includes(p.id);
       if (wants && p.appId !== id) updateProjectBranch({ ...p, appId: id });
@@ -237,6 +259,12 @@ const ConnectAppsWizard: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
                   type="button"
                   className={`lt-choice${draft.kind === preset.kind ? ' on' : ''}`}
                   onClick={() => {
+                    // Only one Writer's Lens: if it is already there, open it instead of adding another.
+                    const existing = preset.kind === 'writerslens' ? connections.find((c) => c.kind === 'writerslens') : undefined;
+                    if (existing) {
+                      edit(existing, 'writerslens');
+                      return;
+                    }
                     setDraft((d) => ({
                       ...d,
                       kind: preset.kind,
@@ -329,12 +357,59 @@ const ConnectAppsWizard: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
                     Desconectar
                   </button>
                 </p>
-                {wlProjects && (
-                  <p className="lt-note">
-                    {wlProjects.length
-                      ? `Veo ${wlProjects.length === 1 ? 'tu proyecto' : `tus ${wlProjects.length} proyectos`}: ${wlProjects.join(', ')}. Se regará cuando escribas en ellos.`
-                      : 'Esta cuenta no tiene proyectos en Writer’s Lens. ¿Es la misma cuenta de GitHub con la que entras allí?'}
-                  </p>
+                {wlProjects && !wlProjects.length && (
+                  <p className="lt-note">Esta cuenta no tiene proyectos en Writer’s Lens. ¿Es la misma cuenta de GitHub con la que entras allí?</p>
+                )}
+                {wlProjects && wlProjects.length > 0 && (
+                  <>
+                    <p className="lt-note">
+                      Tus proyectos de Writer’s Lens. Elige qué rama riega cada uno: cuando escribas en él, se anotará en esa rama sin preguntarte.
+                    </p>
+                    <div className="lt-checks">
+                      {wlProjects.map((wp) => {
+                        const value = draft.projectBranch[wp.id];
+                        return (
+                          <label key={wp.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ flex: 1 }}>
+                              {wp.name}
+                              <span className="lt-note" style={{ margin: 0 }}>
+                                {' '}
+                                · {wp.words.toLocaleString('es-ES')} palabras
+                              </span>
+                            </span>
+                            <select
+                              className="lt-input"
+                              style={{ maxWidth: '50%' }}
+                              value={value === undefined ? '?' : value}
+                              aria-label={`Rama de ${wp.name}`}
+                              onChange={(e) => {
+                                const next = { ...draft.projectBranch };
+                                if (e.target.value === '?') delete next[wp.id];
+                                else next[wp.id] = e.target.value;
+                                setDraft({ ...draft, projectBranch: next });
+                                // Already connected: keep the choice right away, without going through «Guardar».
+                                if (connections.some((c) => c.id === draft.id && c.kind === 'writerslens')) patchSourceState(draft.id as string, { projectBranch: next });
+                              }}
+                            >
+                              <option value="?">Preguntar la primera vez</option>
+                              <option value="">No es de ninguna rama</option>
+                              {projects
+                                .filter((p) => !p.deletedAt && p.status !== 'completed')
+                                .map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.title}
+                                  </option>
+                                ))}
+                            </select>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <p className="lt-note">
+                      Lo ya escrito no cuenta como riego: la primera vez solo toma nota de cómo está cada proyecto. Lo que escribas a partir de ahora
+                      regará su rama.
+                    </p>
+                  </>
                 )}
                 {connections.find((c) => c.id === draft.id)?.kind !== 'writerslens' && <p className="lt-note">Termina los pasos y pulsa «Guardar» para que empiece a regar.</p>}
               </>

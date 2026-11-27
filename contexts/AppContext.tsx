@@ -58,6 +58,7 @@ import { backupFileName, summarizeBackup } from '../utils/backup';
 import { saveTextFile } from '../services/desktop';
 import { analyzeDraftNow, getAttemptHistory, getLatestResult, loadLatestDraft, saveDraft } from '../services/passionService';
 import { breadcrumb } from '../services/diagnostics';
+import { mergeDuplicateSources } from '../utils/sources';
 
 export interface AppContextType {
   currentUser: User;
@@ -602,6 +603,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setConnections((prev) => prev.filter((item) => item.id !== connectionId));
     setProjects((prev) => prev.map((item) => (item.appId === connectionId ? { ...item, appId: undefined } : item)));
   }, []);
+
+  // The same automatic source connected twice would water everything twice: keep one.
+  useEffect(() => {
+    const result = mergeDuplicateSources(connections, projects);
+    if (!result.changed) return;
+    breadcrumb('Unidas dos conexiones de la misma fuente automática');
+    setConnections(result.connections);
+    setProjects(result.projects);
+  }, [connections, projects]);
 
   const patchSourceState = useCallback((connectionId: string, patch: Partial<NonNullable<AppConnection['sourceState']>>) => {
     setConnections((prev) =>
