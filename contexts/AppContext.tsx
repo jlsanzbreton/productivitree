@@ -57,6 +57,7 @@ import {
 import { backupFileName, summarizeBackup } from '../utils/backup';
 import { saveTextFile } from '../services/desktop';
 import { analyzeDraftNow, getAttemptHistory, getLatestResult, loadLatestDraft, saveDraft } from '../services/passionService';
+import { breadcrumb } from '../services/diagnostics';
 
 export interface AppContextType {
   currentUser: User;
@@ -495,6 +496,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const logEvent = useCallback((kind: HistoryKind, entityId: string, title: string, action: HistoryAction, detail?: string) => {
     const entry: HistoryEntry = { id: newId('log'), at: new Date().toISOString(), kind, entityId, title, action, ...(detail ? { detail } : {}) };
+    breadcrumb(`${kind} ${action}: ${title}${detail ? ` (${detail})` : ''}`);
     setHistory((prev) => [entry, ...prev].slice(0, MAX_HISTORY));
   }, []);
 
@@ -848,6 +850,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const importTree = useCallback(
     (data: ImportedTree, options?: { quiet?: boolean }) => {
+      breadcrumb(`Importar árbol: ${data.projects.length} ramas`);
       setCurrentUser((prev) => ({ ...prev, purpose: data.purpose || prev.purpose }));
       setRoots(data.roots);
       setTrunkSegments(data.trunkSegments);

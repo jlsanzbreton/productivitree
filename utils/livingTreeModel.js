@@ -74,7 +74,7 @@ export const buildLivingTreeModel = (
       }));
     const fruits = achievements
       .filter((item) => item.projectId === project.id && isFruit(item))
-      .map((item) => ({ id: item.id, n: item.title, done: Boolean(item.harvested) }));
+      .map((item) => ({ id: item.id, n: item.title, done: Boolean(item.harvested), ...(item.fromTaskId ? { from: item.fromTaskId } : {}) }));
     const age = daysSince(project.createdAt, now);
     const { side, t } = placement.get(project.id) || { side: 1, t: 0.7 };
     return {

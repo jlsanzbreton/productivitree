@@ -11,6 +11,7 @@ import { SourceQuestion, useAutoSources } from './components/LivingTree/useAutoS
 import { finishWritersLensSignIn } from './services/writersLens';
 import { activitySearchFromUrl, parseActivityParams } from './utils/activityLink';
 import { listenDesktopLinks, listenQuickLogShortcut } from './services/desktop';
+import { previousSessionBroken } from './services/diagnostics';
 import { parseTreeJson } from './utils/treeJson';
 import { snapshotExample } from './utils/exampleGuide';
 import PassionTest from './components/PassionTest/PassionTest';
@@ -162,6 +163,13 @@ const App: React.FC = () => {
       stopShortcut();
     };
     // Registered once on load.
+  }, []);
+
+  // Mac app: say so if it was closed by a hang or a forced quit last time (the log has the details).
+  useEffect(() => {
+    previousSessionBroken().then((broken) => {
+      if (broken) setToast('La última vez Productivitree no se cerró bien. Queda anotado en Ajustes → Registro de errores.');
+    });
   }, []);
 
   useEffect(() => {

@@ -23,7 +23,7 @@ test('model carries leaf ages and only real fruits', () => {
       projects: [project('p', '2026-11-01')],
       stages: [{ id: 's', projectId: 'p', title: 'T', status: 'healthy', lastActivityAt: '2026-11-25T00:00:00Z' }],
       achievements: [
-        { id: 'f', projectId: 'p', title: 'Book', harvested: true },
+        { id: 'f', projectId: 'p', title: 'Book', harvested: true, fromTaskId: 's' },
         { id: 'm', projectId: 'p', title: 'Milestone reached', type: 'milestone' },
       ],
     },
@@ -31,6 +31,7 @@ test('model carries leaf ages and only real fruits', () => {
   );
   assert.equal(model.branches[0].tasks[0].d, 2);
   assert.deepEqual(model.branches[0].fruits.map((f) => f.id), ['f']);
+  assert.equal(model.branches[0].fruits[0].from, 's', 'a fruit remembers its leaf so it hangs next to it');
   assert.deepEqual(model.trunk[0], ['Mechanical', 'Engineering']);
 });
 

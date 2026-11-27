@@ -1,7 +1,7 @@
 import type { AchievementData, CorePurposeRoot, ProjectBranch, ProjectStageLeaf, SkillTrunkSegment } from '../types';
 
 export interface LivingLeaf { id: string; n: string; d: number; done: boolean }
-export interface LivingFruit { id: string; n: string; done: boolean }
+export interface LivingFruit { id: string; n: string; done: boolean; /** Leaf (task) it came from, if any. */ from?: string }
 export interface LivingBranch {
   id: string;
   name: string;
