@@ -83,6 +83,8 @@ export interface AppSourceState {
   sections?: Record<string, { h: string; w: number }>;
   /** Writer's Lens: project id → branch id it waters ('' = none). Asked the first time. */
   projectBranch?: Record<string, string>;
+  /** Writer's Lens: projects already given their first watering (the words written before connecting). */
+  firstWatered?: string[];
 }
 
 /** An app the user works in, set up with the connect-apps wizard. */

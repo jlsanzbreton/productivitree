@@ -88,3 +88,49 @@ export const describeWritersLensEdit = (edit) => {
   const words = edit.words > 0 ? ` (+${edit.words} palabras)` : edit.words < 0 ? ` (${edit.words} palabras)` : '';
   return names ? `Escribiste en ${names}${more}${words}` : `Escribiste en «${edit.projectName}»${words}`;
 };
+
+/**
+ * The same source connected twice (two Writer's Lens entries, or the same YouTube channel)
+ * would water everything twice. Keeps one per source: the one with more branches, else the
+ * oldest. Its memory (sections seen, project → branch answers, videos) absorbs the other's,
+ * and the other's branches move to it.
+ * @returns {{connections: object[], projects: object[], changed: boolean}}
+ */
+export const mergeDuplicateSources = (connections = [], projects = []) => {
+  const keyOf = (c) =>
+    c.tracking !== 'auto' ? '' : c.kind === 'writerslens' ? 'writerslens' : c.kind === 'youtube' && c.channelId ? `youtube:${c.channelId}` : '';
+  const branches = (c) => projects.filter((p) => p.appId === c.id).length;
+  const groups = new Map();
+  connections.forEach((c) => {
+    const key = keyOf(c);
+    if (key) groups.set(key, [...(groups.get(key) || []), c]);
+  });
+  const replaced = new Map();
+  const merged = new Map();
+  groups.forEach((group) => {
+    if (group.length < 2) return;
+    const [keep, ...rest] = [...group].sort((a, b) => branches(b) - branches(a) || String(a.createdAt).localeCompare(String(b.createdAt)));
+    let state = { ...(keep.sourceState || {}) };
+    let openUrl = keep.openUrl;
+    rest.forEach((other) => {
+      const o = other.sourceState || {};
+      state = {
+        ...o,
+        ...state,
+        projectBranch: { ...(o.projectBranch || {}), ...(state.projectBranch || {}) },
+        ...(state.sections || o.sections ? { sections: state.sections || o.sections } : {}),
+        ...(state.seenVideos || o.seenVideos ? { seenVideos: [...new Set([...(o.seenVideos || []), ...(state.seenVideos || [])])] } : {}),
+        ...(state.firstWatered || o.firstWatered ? { firstWatered: [...new Set([...(o.firstWatered || []), ...(state.firstWatered || [])])] } : {}),
+      };
+      if (!openUrl && other.openUrl) openUrl = other.openUrl;
+      replaced.set(other.id, keep.id);
+    });
+    merged.set(keep.id, { ...keep, openUrl, sourceState: state });
+  });
+  if (!replaced.size) return { connections, projects, changed: false };
+  return {
+    connections: connections.filter((c) => !replaced.has(c.id)).map((c) => merged.get(c.id) || c),
+    projects: projects.map((p) => (p.appId && replaced.has(p.appId) ? { ...p, appId: replaced.get(p.appId) } : p)),
+    changed: true,
+  };
+};
