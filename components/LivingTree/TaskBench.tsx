@@ -17,7 +17,7 @@ interface TaskBenchProps {
 
 /** Workbench for one leaf: continue in its app, see what was done, take notes, pick its fruit. */
 const TaskBench: React.FC<TaskBenchProps> = ({ taskId, open, onClose, onSproutFruit, onOpenFruit, onOpenTask, onPromoted }) => {
-  const { currentTasks, projects, connections, achievements, patchTask, logTaskWork, setTaskDone, archiveItem, sproutLeaf, promoteTwig } =
+  const { currentTasks, projects, connections, achievements, patchTask, logTaskWork, setTaskDone, archiveItem, sproutLeaf, promoteTwig, setTaskParent } =
     useContext(AppContext) as AppContextType;
   const [kidTitle, setKidTitle] = useState('');
   const task = currentTasks.find((item) => item.id === taskId) || null;
@@ -50,6 +50,12 @@ const TaskBench: React.FC<TaskBenchProps> = ({ taskId, open, onClose, onSproutFr
   const parent = parentId ? branchLeaves.find((item) => item.id === parentId) : undefined;
   const kids = parent ? [] : branchLeaves.filter((item) => twigParent(item, branchLeaves) === task.id);
   const plainLeaves = branchLeaves.filter((item) => !twigParent(item, branchLeaves) && item.id !== task.id).length;
+  // Leaves of the branch that can join this twig: plain leaves without twig of their own.
+  const movable = parent
+    ? []
+    : branchLeaves.filter(
+        (item) => item.id !== task.id && !twigParent(item, branchLeaves) && !branchLeaves.some((other) => twigParent(other, branchLeaves) === item.id)
+      );
   // Big enough to stand on its own: as many leaves as the rest of the branch, or at least four.
   const bigTwig = kids.length >= 4 || (kids.length >= 2 && kids.length >= plainLeaves);
 
@@ -87,6 +93,14 @@ const TaskBench: React.FC<TaskBenchProps> = ({ taskId, open, onClose, onSproutFr
           </>
         ) : null}
         {kids.length ? ' · ramita' : ' · hoja'}
+        {parent ? (
+          <>
+            {' · '}
+            <button className="lt-link" onClick={() => setTaskParent(task.id, null)}>
+              sacar de la ramita
+            </button>
+          </>
+        ) : null}
       </p>
       <h2>{task.title}</h2>
       <span className="lt-state">
@@ -165,6 +179,16 @@ const TaskBench: React.FC<TaskBenchProps> = ({ taskId, open, onClose, onSproutFr
                     <i className="lt-dot" style={{ background: kidColor }} />
                     <span className="nm">{kid.title}</span>
                     <span className="dd">{isDone(kid) ? 'hecha' : when(kid.lastActivityAt)}</span>
+                    <button
+                      className="lt-link"
+                      title="Devolver a la rama"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setTaskParent(kid.id, null);
+                      }}
+                    >
+                      Sacar
+                    </button>
                   </li>
                 );
               })}
@@ -186,6 +210,25 @@ const TaskBench: React.FC<TaskBenchProps> = ({ taskId, open, onClose, onSproutFr
               Añadir
             </button>
           </form>
+          {movable.length > 0 && (
+            <>
+              <p className="lt-note">O trae hojas que ya tienes en {project.title} (siguen regándose igual, también desde Writer’s Lens):</p>
+              <ul className="lt-list">
+                {movable.map((leaf) => (
+                  <li
+                    key={leaf.id}
+                    className="lt-click"
+                    tabIndex={0}
+                    onClick={() => setTaskParent(leaf.id, task.id)}
+                    onKeyDown={(e) => e.key === 'Enter' && setTaskParent(leaf.id, task.id)}
+                  >
+                    <span className="nm">+ {leaf.title}</span>
+                    <span className="dd">a la ramita</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
           {kids.length > 0 && (
             <>
               {bigTwig && <p className="lt-note">Esta ramita ya crece tanto como la rama: quizá merece ser un proyecto propio.</p>}

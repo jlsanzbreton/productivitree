@@ -4,6 +4,7 @@ import type { AppConnection } from '../../types';
 import { fetchYoutubeFeed, isDesktop } from '../../services/desktop';
 import { readWritersLens } from '../../services/writersLens';
 import { describeWritersLensEdit, diffWritersLens, newVideos, parseYoutubeFeed, WritersLensEdit } from '../../utils/sources';
+import { norm } from '../../utils/activityLink';
 
 /** A Writer's Lens project whose branch is not known yet: ask once ("¿Estabas con…?"). */
 export interface SourceQuestion {
@@ -55,14 +56,26 @@ export const useAutoSources = ({ onToast, onAsk }: { onToast: (text: string) => 
   };
 
   const checkWritersLens = async (connection: AppConnection) => {
-    const { patchSourceState, recordExternalActivity, projects } = ctxRef.current;
+    const { patchSourceState, recordExternalActivity, projects, currentTasks } = ctxRef.current;
     const rows = await readWritersLens();
     const { snapshot, edits } = diffWritersLens(connection.sourceState?.sections, rows);
     patchSourceState(connection.id, { sections: snapshot, checkedAt: new Date().toISOString(), error: undefined });
-    const map = connection.sourceState?.projectBranch || {};
+    const map = { ...(connection.sourceState?.projectBranch || {}) };
+    let moved = false;
+    const hasLeaf = (branchId: string, title: string) =>
+      currentTasks.some((t) => t.projectId === branchId && !t.deletedAt && norm(t.title) === norm(title));
     edits.forEach((edit) => {
-      const branchId = map[edit.projectId];
+      let branchId = map[edit.projectId];
       if (branchId === '') return; // "not a project": never water
+      // The leaf grew into a branch of its own (a twig turned into a branch): follow it there.
+      if (branchId && !hasLeaf(branchId, edit.projectName)) {
+        const grown = projects.find((p) => p.grownFrom === branchId && !p.deletedAt && hasLeaf(p.id, edit.projectName));
+        if (grown) {
+          branchId = grown.id;
+          map[edit.projectId] = grown.id;
+          moved = true;
+        }
+      }
       const branch = branchId ? projects.find((p) => p.id === branchId && !p.deletedAt) : undefined;
       if (!branch) {
         const key = `${connection.id}:${edit.projectId}`;
@@ -74,6 +87,7 @@ export const useAutoSources = ({ onToast, onAsk }: { onToast: (text: string) => 
       const result = recordExternalActivity({ branch: branch.id, task: edit.projectName, app: WRITERS_LENS_APP, note: describeWritersLensEdit(edit) });
       if (result.ok) handlers.current.onToast(`Writer’s Lens regó «${edit.projectName}» en ${branch.title}.`);
     });
+    if (moved) patchSourceState(connection.id, { projectBranch: map });
   };
 
   const runNow = useCallback(async () => {
