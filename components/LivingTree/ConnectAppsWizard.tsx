@@ -10,12 +10,12 @@ import { parseYoutubeChannelId } from '../../utils/sources';
 import { openExternal } from './treeHelpers';
 
 const PRESETS: Array<{ kind: AppConnectionKind; name: string; hint: string; url: string }> = [
+  { kind: 'writerslens', name: 'Writer’s Lens', hint: 'Se riega sola: entras con GitHub y listo', url: '' },
+  { kind: 'youtube', name: 'YouTube', hint: 'Se riega sola: cada vídeo publicado es un fruto', url: '' },
   { kind: 'webapp', name: '', hint: 'Una app web tuya o de otros', url: 'https://' },
   { kind: 'bear', name: 'Bear', hint: 'Notas con etiquetas por proyecto', url: 'bear://x-callback-url/search?tag={etiqueta}' },
   { kind: 'github', name: 'GitHub', hint: 'Repositorios de código', url: 'https://github.com/' },
   { kind: 'docs', name: 'Google Docs', hint: 'Documentos compartidos', url: 'https://docs.google.com/document/u/0/?q={rama}' },
-  { kind: 'writerslens', name: 'Writer’s Lens', hint: 'Tu app de escritura: se riega sola', url: 'https://' },
-  { kind: 'youtube', name: 'YouTube', hint: 'Tu canal: cada vídeo publicado es un fruto', url: '' },
   { kind: 'other', name: '', hint: 'Cualquier app que se abra con un enlace', url: '' },
 ];
 
@@ -128,7 +128,7 @@ const ConnectAppsWizard: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
       channelId: app.channelId || '',
     });
     // Writer's Lens goes straight to "Conectar con GitHub"; YouTube first needs the channel ID.
-    setStep(makeAuto === 'writerslens' ? 2 : 1);
+    setStep((makeAuto || app.kind) === 'writerslens' ? 2 : 1);
   };
 
   const save = () => {
@@ -229,22 +229,24 @@ const ConnectAppsWizard: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
 
         {step === 0 && (
           <>
-            <p className="lt-sub">¿Dónde haces el trabajo? Elige lo más parecido; en el paso siguiente le pones nombre.</p>
+            <p className="lt-sub">¿Dónde haces el trabajo? Pulsa la que sea. Writer’s Lens y YouTube se conectan solas; para las demás le pones nombre y enlace.</p>
             <div className="lt-choices">
               {PRESETS.map((preset) => (
                 <button
                   key={preset.kind}
                   type="button"
                   className={`lt-choice${draft.kind === preset.kind ? ' on' : ''}`}
-                  onClick={() =>
+                  onClick={() => {
                     setDraft((d) => ({
                       ...d,
                       kind: preset.kind,
                       name: preset.name || (d.kind === preset.kind ? d.name : ''),
                       openUrl: preset.url,
                       tracking: AUTO_KINDS.includes(preset.kind) ? 'auto' : d.tracking === 'auto' ? 'manual' : d.tracking,
-                    }))
-                  }
+                    }));
+                    // One click: Writer's Lens needs no link, so it goes straight to "Conectar con GitHub".
+                    setStep(preset.kind === 'writerslens' ? 2 : 1);
+                  }}
                 >
                   <b>{preset.kind === 'webapp' ? 'App web' : preset.kind === 'other' ? 'Otra' : preset.name}</b>
                   <span>{preset.hint}</span>
@@ -409,10 +411,15 @@ const ConnectAppsWizard: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
 
         {step >= 0 && (
           <div className="lt-acts">
-            <button className="lt-btn" onClick={() => (step === 0 ? (connections.length ? setStep(-1) : onClose()) : setStep(step - 1))}>
+            <button
+              className="lt-btn"
+              onClick={() =>
+                step === 0 ? (connections.length ? setStep(-1) : onClose()) : setStep(step === 2 && draft.kind === 'writerslens' ? 0 : step - 1)
+              }
+            >
               {step === 0 ? 'Cancelar' : '← Atrás'}
             </button>
-            {step < 3 ? (
+            {step === 0 ? null : step < 3 ? (
               <button className="lt-btn sprout" disabled={!canNext} onClick={() => setStep(step + 1)}>
                 Siguiente
               </button>
