@@ -5,7 +5,7 @@
 export const ACTIVITY_PARAM = 'actividad';
 const MAX_ACTIVITY = 50;
 
-const norm = (value) =>
+export const norm = (value) =>
   String(value || '')
     .toLowerCase()
     .normalize('NFD')

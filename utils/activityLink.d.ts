@@ -1,6 +1,8 @@
 import type { ActivityEntry, ProjectBranch, ProjectStageLeaf } from '../types';
 
 export const ACTIVITY_PARAM: string;
+/** Compares names ignoring case, accents and extra spaces. */
+export function norm(value: string): string;
 export interface ActivityParams { branch: string; task: string; app: string; note: string; url: string }
 export const DESKTOP_ACTIVITY_ORIGIN: string;
 export function activitySearchFromUrl(url: string): string | null;

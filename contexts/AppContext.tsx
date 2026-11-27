@@ -150,6 +150,8 @@ export interface AppContextType {
   sproutLeaf: (projectId: string, input: { title: string; link?: string; notes?: string; parentTaskId?: string }) => string;
   /** Turns a twig (a leaf with leaves) into a branch of its own, next to the original one. */
   promoteTwig: (taskId: string) => string | null;
+  /** Puts an existing leaf on a twig of its branch (parentId) or back on the branch (null). */
+  setTaskParent: (taskId: string, parentId: string | null) => void;
   sproutFruit: (projectId: string, input: { title: string; fromTaskId?: string; harvested?: boolean; link?: string }) => string;
   setFruitHarvested: (fruitId: string, harvested: boolean) => void;
   updateFruit: (fruitId: string, patch: Partial<Pick<AchievementData, 'title' | 'link' | 'description'>>) => void;
@@ -679,6 +681,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return id;
     },
     [currentTasks, currentUser.id, logEvent, projects, recordMeaningfulActivity]
+  );
+
+  const setTaskParent = useCallback(
+    (taskId: string, parentId: string | null) => {
+      const task = currentTasks.find((item) => item.id === taskId && !item.deletedAt);
+      if (!task) return;
+      const parent = parentId ? currentTasks.find((item) => item.id === parentId && !item.deletedAt) : undefined;
+      // Same branch only, and twigs are one level deep: a twig cannot hang from another, nor carry its own twig into one.
+      if (parentId && (!parent || parent.projectId !== task.projectId || parent.parentTaskId || parent.id === task.id)) return;
+      if (parentId && currentTasks.some((item) => item.parentTaskId === task.id && !item.deletedAt)) return;
+      setCurrentTasks((prev) =>
+        prev.map((item) => {
+          if (item.id !== taskId) return item;
+          if (parentId) return { ...item, parentTaskId: parentId };
+          const { parentTaskId: _drop, ...rest } = item;
+          return rest;
+        })
+      );
+      logEvent('leaf', task.id, task.title, 'created', parent ? `movida a la ramita ${parent.title}` : 'sacada de su ramita');
+    },
+    [currentTasks, logEvent]
   );
 
   const promoteTwig = useCallback(
@@ -1213,6 +1236,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         sproutBranch,
         sproutLeaf,
         promoteTwig,
+        setTaskParent,
         sproutFruit,
         setFruitHarvested,
         updateFruit,
