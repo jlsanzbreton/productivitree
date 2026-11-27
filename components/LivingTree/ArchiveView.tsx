@@ -3,6 +3,7 @@ import './livingTree.css';
 import { AppContext, AppContextType } from '../../contexts/AppContext';
 import { HistoryAction, HistoryKind } from '../../types';
 import { isDone, when } from './treeHelpers';
+import { confirmAction } from '../../services/desktop';
 
 type Tab = 'closed' | 'paused' | 'deleted' | 'log';
 
@@ -71,8 +72,8 @@ const ArchiveView: React.FC<{ onBack: () => void; onShowBranch: (projectId: stri
           <button
             className="lt-link"
             style={{ color: '#b8432f' }}
-            onClick={() => {
-              if (window.confirm(`¿Borrar «${row.title}» para siempre? No se puede deshacer.`)) purgeItem(row.kind, row.id);
+            onClick={async () => {
+              if (await confirmAction(`¿Borrar «${row.title}» para siempre? No se puede deshacer.`)) purgeItem(row.kind, row.id);
             }}
           >
             Borrar

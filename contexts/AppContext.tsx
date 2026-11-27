@@ -55,6 +55,7 @@ import {
   restoreBackup,
 } from '../services/backupService';
 import { backupFileName, summarizeBackup } from '../utils/backup';
+import { saveTextFile } from '../services/desktop';
 import { analyzeDraftNow, getAttemptHistory, getLatestResult, loadLatestDraft, saveDraft } from '../services/passionService';
 
 export interface AppContextType {
@@ -121,7 +122,8 @@ export interface AppContextType {
   privacySettings: PrivacySettings;
   setPrivacySettings: React.Dispatch<React.SetStateAction<PrivacySettings>>;
   exportAllData: () => string;
-  downloadBackup: () => Promise<void>;
+  /** false when the person cancels the save dialog (Mac app). */
+  downloadBackup: () => Promise<boolean>;
   previewBackup: (text: string) => BackupSummary;
   restoreFromBackup: (text: string) => Promise<void>;
   lastBackupAt: string | null;
@@ -1010,16 +1012,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const downloadBackup = useCallback(async () => {
     const now = new Date();
     const json = await createBackupJson(persistedState, now);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = backupFileName(now);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    if (!(await saveTextFile(backupFileName(now), json))) return false;
     setLastBackupAt(markBackupDone(now));
+    return true;
   }, [persistedState]);
 
   const previewBackup = useCallback((text: string): BackupSummary => summarizeBackup(parseBackup(text)), []);
