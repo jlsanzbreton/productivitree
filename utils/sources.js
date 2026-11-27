@@ -120,6 +120,7 @@ export const mergeDuplicateSources = (connections = [], projects = []) => {
         projectBranch: { ...(o.projectBranch || {}), ...(state.projectBranch || {}) },
         ...(state.sections || o.sections ? { sections: state.sections || o.sections } : {}),
         ...(state.seenVideos || o.seenVideos ? { seenVideos: [...new Set([...(o.seenVideos || []), ...(state.seenVideos || [])])] } : {}),
+        ...(state.firstWatered || o.firstWatered ? { firstWatered: [...new Set([...(o.firstWatered || []), ...(state.firstWatered || [])])] } : {}),
       };
       if (!openUrl && other.openUrl) openUrl = other.openUrl;
       replaced.set(other.id, keep.id);

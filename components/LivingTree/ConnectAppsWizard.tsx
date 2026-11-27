@@ -8,6 +8,7 @@ import { confirmAction, isDesktop } from '../../services/desktop';
 import { connectWritersLens, disconnectWritersLens, readWritersLens, writersLensAccount, writersLensConfigured } from '../../services/writersLens';
 import { parseYoutubeChannelId } from '../../utils/sources';
 import { openExternal } from './treeHelpers';
+import { WRITERS_LENS_APP } from './useAutoSources';
 
 const PRESETS: Array<{ kind: AppConnectionKind; name: string; hint: string; url: string }> = [
   { kind: 'writerslens', name: 'Writer’s Lens', hint: 'Se riega sola: entras con GitHub y listo', url: '' },
@@ -46,13 +47,17 @@ type Draft = {
   channelId: string;
   /** Writer's Lens: project id → branch id ('' = none). Missing = ask the first time. */
   projectBranch: Record<string, string>;
+  /** Writer's Lens projects already watered with the words written before connecting. */
+  firstWatered: string[];
 };
-const emptyDraft = (): Draft => ({ kind: 'webapp', name: '', openUrl: 'https://', tracking: 'manual', branchIds: [], channelId: '', projectBranch: {} });
+const emptyDraft = (): Draft => ({ kind: 'webapp', name: '', openUrl: 'https://', tracking: 'manual', branchIds: [], channelId: '', projectBranch: {}, firstWatered: [] });
 type WlProject = { id: string; name: string; words: number };
 
 /** Step by step set-up of the apps where the work happens: how to open them and how they report activity. */
 const ConnectAppsWizard: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
-  const { connections, projects, saveConnection, removeConnection, updateProjectBranch, patchSourceState } = useContext(AppContext) as AppContextType;
+  const { connections, projects, saveConnection, removeConnection, updateProjectBranch, patchSourceState, recordExternalActivity } = useContext(
+    AppContext
+  ) as AppContextType;
   const [step, setStep] = useState(-1);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [copied, setCopied] = useState(false);
@@ -147,6 +152,7 @@ const ConnectAppsWizard: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
       branchIds: projects.filter((p) => p.appId === app.id).map((p) => p.id),
       channelId: app.channelId || '',
       projectBranch: { ...(app.sourceState?.projectBranch || {}) },
+      firstWatered: [...(app.sourceState?.firstWatered || [])],
     });
     // Writer's Lens goes straight to "Conectar con GitHub"; YouTube first needs the channel ID.
     setStep((makeAuto || app.kind) === 'writerslens' ? 2 : 1);
@@ -162,7 +168,7 @@ const ConnectAppsWizard: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
       tracking: isAuto ? 'auto' : draft.tracking,
       ...(draft.kind === 'youtube' && channelId ? { channelId } : {}),
     });
-    if (draft.kind === 'writerslens') patchSourceState(id, { projectBranch: draft.projectBranch });
+    if (draft.kind === 'writerslens') patchSourceState(id, { projectBranch: draft.projectBranch, firstWatered: draft.firstWatered });
     projects.forEach((p) => {
       const wants = draft.branchIds.includes(p.id);
       if (wants && p.appId !== id) updateProjectBranch({ ...p, appId: id });
@@ -386,9 +392,24 @@ const ConnectAppsWizard: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
                                 const next = { ...draft.projectBranch };
                                 if (e.target.value === '?') delete next[wp.id];
                                 else next[wp.id] = e.target.value;
-                                setDraft({ ...draft, projectBranch: next });
+                                // The first time a project gets its branch, what was already written waters it once.
+                                let firstWatered = draft.firstWatered;
+                                if (e.target.value && e.target.value !== '?' && !firstWatered.includes(wp.id) && wp.words > 0) {
+                                  const result = recordExternalActivity({
+                                    branch: e.target.value,
+                                    task: wp.name,
+                                    app: WRITERS_LENS_APP,
+                                    note: `Primer riego: ${wp.words.toLocaleString('es-ES')} palabras ya escritas`,
+                                  });
+                                  if (result.ok) {
+                                    firstWatered = [...firstWatered, wp.id];
+                                    setWlMsg(`«${wp.name}» riega ${projects.find((p) => p.id === e.target.value)?.title || 'su rama'}: primer riego con ${wp.words.toLocaleString('es-ES')} palabras.`);
+                                  } else setWlMsg(result.message);
+                                }
+                                setDraft({ ...draft, projectBranch: next, firstWatered });
                                 // Already connected: keep the choice right away, without going through «Guardar».
-                                if (connections.some((c) => c.id === draft.id && c.kind === 'writerslens')) patchSourceState(draft.id as string, { projectBranch: next });
+                                if (connections.some((c) => c.id === draft.id && c.kind === 'writerslens'))
+                                  patchSourceState(draft.id as string, { projectBranch: next, firstWatered });
                               }}
                             >
                               <option value="?">Preguntar la primera vez</option>
@@ -406,8 +427,8 @@ const ConnectAppsWizard: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
                       })}
                     </div>
                     <p className="lt-note">
-                      Lo ya escrito no cuenta como riego: la primera vez solo toma nota de cómo está cada proyecto. Lo que escribas a partir de ahora
-                      regará su rama.
+                      Al elegir la rama, lo que ya llevas escrito le da un primer riego (una hoja con el nombre del proyecto). Después, cada vez que
+                      escribas, regará esa hoja.
                     </p>
                   </>
                 )}
