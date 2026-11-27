@@ -16,13 +16,13 @@ export const Button: React.FC<ButtonProps> = ({
   className = '',
   ...props
 }) => {
-  const baseStyle = "font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black transition-all duration-150 ease-in-out inline-flex items-center justify-center";
+  const baseStyle = "font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-150 ease-in-out inline-flex items-center justify-center";
   
   const variantStyles = {
-    primary: 'bg-gradient-to-r from-[#D97A00] to-[#F9D967] text-black hover:brightness-110 focus:ring-yellow-500 disabled:opacity-65',
-    secondary: 'bg-[#181A1D] hover:bg-[#1F2125] text-[#FEEA96] border border-yellow-700/30 focus:ring-yellow-700 disabled:opacity-65',
-    danger: 'bg-[#5A1E1A] hover:bg-[#6D2320] text-[#FEEA96] border border-red-700/45 focus:ring-red-700 disabled:opacity-65',
-    ghost: 'bg-transparent hover:bg-yellow-500/10 text-[#F9D967] border border-transparent hover:border-yellow-700/30 focus:ring-yellow-700 disabled:text-[#A59765]',
+    primary: 'bg-[#4d7f32] hover:bg-[#426e2a] text-white focus:ring-[#4d7f32] disabled:opacity-60',
+    secondary: 'bg-white hover:border-[#5d6453] text-[#1d2117] border border-[#dcdccd] focus:ring-[#5d6453] disabled:opacity-60',
+    danger: 'bg-white text-[#b8432f] border border-[#e3c4bb] hover:border-[#b8432f] focus:ring-[#b8432f] disabled:opacity-60',
+    ghost: 'bg-transparent text-[#4d7f32] underline border border-transparent focus:ring-[#4d7f32] disabled:opacity-60',
   };
 
   const sizeStyles = {
