@@ -58,3 +58,27 @@ test('export and re-import keep the tree', () => {
   assert.equal(again.data.purpose, 'Safer future');
   assert.equal(again.data.projects[0].appId, again.data.connections[0].id);
 });
+
+test('twigs (leaves inside a leaf) and grownFrom survive a round trip', () => {
+  const doc = {
+    branches: [
+      { name: 'Storytelling', leaves: [{ name: 'Trilogía', lastActivity: 1, leaves: [{ name: 'Libro 1', lastActivity: 2 }, 'Libro 2'] }] },
+      { name: 'Ensayos', grownFrom: 'Storytelling' },
+      { name: 'Huérfana', grownFrom: 'No existe' },
+    ],
+  };
+  const result = parseTreeJson(JSON.stringify(doc), { userId: 'u1', now });
+  assert.equal(result.ok, true);
+  const twig = result.data.stages.find((s) => s.title === 'Trilogía');
+  const kids = result.data.stages.filter((s) => s.parentTaskId === twig.id).map((s) => s.title);
+  assert.deepEqual(kids, ['Libro 1', 'Libro 2']);
+  const story = result.data.projects.find((p) => p.title === 'Storytelling');
+  assert.equal(result.data.projects.find((p) => p.title === 'Ensayos').grownFrom, story.id);
+  assert.equal(result.data.projects.find((p) => p.title === 'Huérfana').grownFrom, undefined);
+  assert.ok(result.warnings.some((w) => w.includes('No existe')));
+
+  const again = JSON.parse(exportTreeJson({ ...result.data, stages: result.data.stages }));
+  assert.equal(again.branches[0].leaves.length, 1);
+  assert.deepEqual(again.branches[0].leaves[0].leaves.map((l) => l.name), ['Libro 1', 'Libro 2']);
+  assert.equal(again.branches[1].grownFrom, 'Storytelling');
+});

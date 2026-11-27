@@ -5,6 +5,7 @@ import App from './App';
 import { AppProvider } from './contexts/AppContext';
 import AppErrorBoundary from './components/ErrorBoundary/AppErrorBoundary';
 import { startDesktopStorage } from './services/desktop';
+import { startDiagnostics } from './services/diagnostics';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -12,7 +13,8 @@ if (!rootElement) {
 }
 
 const root = ReactDOM.createRoot(rootElement);
-// In the Mac app the tree lives in a file: read it before the app starts.
+// Mac app: keep a log of errors and hangs, and read the tree from its file before starting.
+startDiagnostics();
 startDesktopStorage().finally(() => root.render(
   <React.StrictMode>
     <AppErrorBoundary>

@@ -27,11 +27,28 @@ export const splitTwoLines = (title) => {
 };
 
 /**
+ * The twig a leaf hangs from: its parent leaf, if that leaf is still on the same branch
+ * and is itself a plain leaf (twigs are one level deep).
+ */
+export const twigParent = (stage, stagesOfBranch) => {
+  const id = stage && stage.parentTaskId;
+  if (!id || id === stage.id) return '';
+  const parent = stagesOfBranch.find((item) => item.id === id && !item.deletedAt);
+  return parent && !parent.parentTaskId ? parent.id : '';
+};
+
+/**
  * Decides where each branch grows. Explicit side/height win; the rest alternate
  * right/left in creation order, older branches lower on the trunk (like a real tree).
  */
 export const placeBranches = (projects) => {
-  const ordered = [...projects].sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+  const sorted = [...projects].sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+  // A branch that grew out of another one's twig comes out of the trunk right next to it.
+  const ids = new Set(sorted.map((project) => project.id));
+  const grown = sorted.filter(
+    (project) => project.grownFrom && project.grownFrom !== project.id && ids.has(project.grownFrom) && !project.side && typeof project.height !== 'number'
+  );
+  const ordered = sorted.filter((project) => !grown.includes(project));
   const sides = new Map();
   let flip = 0;
   ordered.forEach((project) => {
@@ -55,6 +72,24 @@ export const placeBranches = (projects) => {
       placement.set(project.id, { side, t });
     });
   });
+  const offspring = new Map();
+  let pending = grown;
+  while (pending.length) {
+    const next = pending.filter((project) => !placement.has(project.grownFrom));
+    pending
+      .filter((project) => placement.has(project.grownFrom))
+      .forEach((project) => {
+        const parent = placement.get(project.grownFrom);
+        const k = (offspring.get(project.grownFrom) || 0) + 1;
+        offspring.set(project.grownFrom, k);
+        placement.set(project.id, { side: parent.side || 1, t: Math.min(HIGH + 0.05, parent.t + 0.06 * k), grown: true });
+      });
+    if (next.length === pending.length) {
+      next.forEach((project) => placement.set(project.id, { side: 1, t: 0.7 })); // loop of grownFrom: give up gracefully
+      break;
+    }
+    pending = next;
+  }
   return placement;
 };
 
@@ -64,19 +99,22 @@ export const buildLivingTreeModel = (
 ) => {
   const placement = placeBranches(projects);
   const branches = projects.map((project) => {
-    const tasks = stages
-      .filter((stage) => stage.projectId === project.id)
-      .map((stage) => ({
+    const own = stages.filter((stage) => stage.projectId === project.id && !stage.deletedAt);
+    const tasks = own.map((stage) => {
+      const parent = twigParent(stage, own);
+      return {
         id: stage.id,
         n: stage.title,
         d: daysSince(stage.lastActivityAt, now),
         done: stage.status === 'completed',
-      }));
+        ...(parent ? { par: parent } : {}),
+      };
+    });
     const fruits = achievements
       .filter((item) => item.projectId === project.id && isFruit(item))
-      .map((item) => ({ id: item.id, n: item.title, done: Boolean(item.harvested) }));
+      .map((item) => ({ id: item.id, n: item.title, done: Boolean(item.harvested), ...(item.fromTaskId ? { from: item.fromTaskId } : {}) }));
     const age = daysSince(project.createdAt, now);
-    const { side, t } = placement.get(project.id) || { side: 1, t: 0.7 };
+    const { side, t, grown } = placement.get(project.id) || { side: 1, t: 0.7 };
     return {
       id: project.id,
       name: project.title,
@@ -86,6 +124,7 @@ export const buildLivingTreeModel = (
       paused: project.status === 'paused',
       young: tasks.length <= 2 || (age < 21 && tasks.length <= 3),
       from: project.sproutedFrom || '',
+      grown: Boolean(grown),
       tasks,
       fruits,
     };

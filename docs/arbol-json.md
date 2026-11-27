@@ -49,6 +49,8 @@ Importar **reemplaza** el árbol actual (ramas, hojas, frutos, pasiones, experie
 | `passion` | Nombre de una de `passions`. |
 | `side`, `height` | Opcionales: `left`, `right` o `center`, y altura en el tronco de 0 (abajo) a 1 (arriba). Si faltan, las ramas se alternan y las más antiguas quedan abajo. |
 | `leaves[]` | Hojas (tareas). `lastActivity` es una fecha ISO o un número de días atrás; decide el color (verde reciente, amarillo, seca). `done: true` si está hecha. |
+| `leaves[].leaves[]` | Opcional: hojas dentro de una hoja. Esa hoja se dibuja como una ramita con sus propias hojas (un solo nivel). Desde su ficha se puede convertir en rama. |
+| `grownFrom` | Opcional: nombre de la rama de la que creció esta (al convertir una ramita en rama). Sale del tronco junto a ella. |
 | `fruits[]` | Frutos (productos finales). `harvested: true` si ya está listo. |
 
 ## Enlaces de actividad

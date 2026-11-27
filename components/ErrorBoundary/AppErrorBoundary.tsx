@@ -1,4 +1,5 @@
 import React from 'react';
+import { logError } from '../../services/diagnostics';
 
 interface AppErrorBoundaryProps {
   children: React.ReactNode;
@@ -21,6 +22,7 @@ class AppErrorBoundary extends React.Component<AppErrorBoundaryProps, AppErrorBo
   componentDidCatch(error: Error) {
     // Keep minimal logging, avoid leaking sensitive runtime state.
     console.error('Productivitree rendering error:', error.message);
+    logError('Pantalla', error);
   }
 
   render() {

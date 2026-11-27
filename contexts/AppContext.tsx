@@ -57,6 +57,7 @@ import {
 import { backupFileName, summarizeBackup } from '../utils/backup';
 import { saveTextFile } from '../services/desktop';
 import { analyzeDraftNow, getAttemptHistory, getLatestResult, loadLatestDraft, saveDraft } from '../services/passionService';
+import { breadcrumb } from '../services/diagnostics';
 
 export interface AppContextType {
   currentUser: User;
@@ -145,7 +146,9 @@ export interface AppContextType {
   /** Everything, including archived (deleted) items. */
   archive: { projects: ProjectBranch[]; stages: ProjectStageLeaf[]; achievements: AchievementData[] };
   sproutBranch: (input: SproutBranchInput) => string;
-  sproutLeaf: (projectId: string, input: { title: string; link?: string; notes?: string }) => string;
+  sproutLeaf: (projectId: string, input: { title: string; link?: string; notes?: string; parentTaskId?: string }) => string;
+  /** Turns a twig (a leaf with leaves) into a branch of its own, next to the original one. */
+  promoteTwig: (taskId: string) => string | null;
   sproutFruit: (projectId: string, input: { title: string; fromTaskId?: string; harvested?: boolean; link?: string }) => string;
   setFruitHarvested: (fruitId: string, harvested: boolean) => void;
   updateFruit: (fruitId: string, patch: Partial<Pick<AchievementData, 'title' | 'link' | 'description'>>) => void;
@@ -495,6 +498,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const logEvent = useCallback((kind: HistoryKind, entityId: string, title: string, action: HistoryAction, detail?: string) => {
     const entry: HistoryEntry = { id: newId('log'), at: new Date().toISOString(), kind, entityId, title, action, ...(detail ? { detail } : {}) };
+    breadcrumb(`${kind} ${action}: ${title}${detail ? ` (${detail})` : ''}`);
     setHistory((prev) => [entry, ...prev].slice(0, MAX_HISTORY));
   }, []);
 
@@ -638,9 +642,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   );
 
   const sproutLeaf = useCallback(
-    (projectId: string, input: { title: string; link?: string; notes?: string }) => {
+    (projectId: string, input: { title: string; link?: string; notes?: string; parentTaskId?: string }) => {
       const now = new Date().toISOString();
       const id = newId('stage');
+      const parent = input.parentTaskId ? currentTasks.find((item) => item.id === input.parentTaskId && !item.deletedAt) : undefined;
       setCurrentTasks((prev) => [
         ...prev,
         {
@@ -655,14 +660,56 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           lastActivityAt: now,
           ...(input.link ? { link: input.link } : {}),
           ...(input.notes ? { notes: input.notes } : {}),
+          ...(parent ? { parentTaskId: parent.parentTaskId || parent.id } : {}),
         },
       ]);
       const project = projects.find((item) => item.id === projectId);
-      logEvent('leaf', id, input.title, 'created', project ? `en ${project.title}` : undefined);
+      logEvent('leaf', id, input.title, 'created', parent ? `en la ramita ${parent.title}` : project ? `en ${project.title}` : undefined);
       recordMeaningfulActivity();
       return id;
     },
-    [currentUser.id, logEvent, projects, recordMeaningfulActivity]
+    [currentTasks, currentUser.id, logEvent, projects, recordMeaningfulActivity]
+  );
+
+  const promoteTwig = useCallback(
+    (taskId: string) => {
+      const twig = currentTasks.find((item) => item.id === taskId && !item.deletedAt);
+      const origin = twig ? projects.find((item) => item.id === twig.projectId) : undefined;
+      if (!twig || !origin) return null;
+      const kids = currentTasks.filter((item) => item.parentTaskId === twig.id && !item.deletedAt).map((item) => item.id);
+      const now = new Date().toISOString();
+      const branchId = addProjectBranch({
+        title: twig.title,
+        description: twig.notes || twig.description || '',
+        priorityLevel: origin.priorityLevel,
+        status: 'active',
+        grownFrom: origin.id,
+        ...(origin.appId ? { appId: origin.appId } : {}),
+        ...(origin.rootId ? { rootId: origin.rootId } : {}),
+      });
+      // Its leaves move to the new branch as plain leaves; the twig itself is now the branch.
+      const moved = new Set([twig.id, ...kids]);
+      setCurrentTasks((prev) =>
+        prev.map((item) => {
+          if (item.id === twig.id) return { ...item, deletedAt: now };
+          if (!kids.includes(item.id)) return item;
+          const { parentTaskId: _drop, ...rest } = item;
+          return { ...rest, projectId: branchId };
+        })
+      );
+      setAchievements((prev) =>
+        prev.map((item) => {
+          if (!item.fromTaskId || !moved.has(item.fromTaskId)) return item;
+          if (item.fromTaskId !== twig.id) return { ...item, projectId: branchId };
+          const { fromTaskId: _drop, ...rest } = item;
+          return { ...rest, projectId: branchId };
+        })
+      );
+      logEvent('branch', branchId, twig.title, 'grown', `de la rama ${origin.title}`);
+      logEvent('leaf', twig.id, twig.title, 'deleted', `se convirtió en la rama ${twig.title}`);
+      return branchId;
+    },
+    [addProjectBranch, currentTasks, logEvent, projects]
   );
 
   const sproutFruit = useCallback(
@@ -848,6 +895,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const importTree = useCallback(
     (data: ImportedTree, options?: { quiet?: boolean }) => {
+      breadcrumb(`Importar árbol: ${data.projects.length} ramas`);
       setCurrentUser((prev) => ({ ...prev, purpose: data.purpose || prev.purpose }));
       setRoots(data.roots);
       setTrunkSegments(data.trunkSegments);
@@ -1154,6 +1202,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         history,
         sproutBranch,
         sproutLeaf,
+        promoteTwig,
         sproutFruit,
         setFruitHarvested,
         updateFruit,

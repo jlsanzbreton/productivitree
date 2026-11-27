@@ -1,7 +1,8 @@
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AppContext, AppContextType } from '../../contexts/AppContext';
-import { isFruit } from '../../utils/livingTreeModel';
+import { isFruit, twigParent } from '../../utils/livingTreeModel';
+import { confirmAction } from '../../services/desktop';
 import { continueUrl, isDone, leafState, openExternal, when } from './treeHelpers';
 
 interface TaskBenchProps {
@@ -10,12 +11,15 @@ interface TaskBenchProps {
   onClose: () => void;
   onSproutFruit: (projectId: string, taskId: string) => void;
   onOpenFruit: (projectId: string, fruitId: string) => void;
+  onOpenTask: (taskId: string) => void;
+  onPromoted: (branchId: string) => void;
 }
 
 /** Workbench for one leaf: continue in its app, see what was done, take notes, pick its fruit. */
-const TaskBench: React.FC<TaskBenchProps> = ({ taskId, open, onClose, onSproutFruit, onOpenFruit }) => {
-  const { currentTasks, projects, connections, achievements, patchTask, logTaskWork, setTaskDone, archiveItem } =
+const TaskBench: React.FC<TaskBenchProps> = ({ taskId, open, onClose, onSproutFruit, onOpenFruit, onOpenTask, onPromoted }) => {
+  const { currentTasks, projects, connections, achievements, patchTask, logTaskWork, setTaskDone, archiveItem, sproutLeaf, promoteTwig } =
     useContext(AppContext) as AppContextType;
+  const [kidTitle, setKidTitle] = useState('');
   const task = currentTasks.find((item) => item.id === taskId) || null;
   const project = task ? projects.find((item) => item.id === task.projectId) || null : null;
   const [notes, setNotes] = useState(task?.notes || '');
@@ -26,6 +30,7 @@ const TaskBench: React.FC<TaskBenchProps> = ({ taskId, open, onClose, onSproutFr
   useEffect(() => {
     setNotes(task?.notes || '');
     setLink(task?.link || '');
+    setKidTitle('');
     // Only reset the fields when another task is opened.
   }, [task?.id]);
 
@@ -40,13 +45,49 @@ const TaskBench: React.FC<TaskBenchProps> = ({ taskId, open, onClose, onSproutFr
   const [state, color] = leafState(task);
   const fruits = achievements.filter((item) => isFruit(item) && item.fromTaskId === task.id);
   const activity = task.activity || [];
+  const branchLeaves = currentTasks.filter((item) => item.projectId === project.id && !item.deletedAt);
+  const parentId = twigParent(task, branchLeaves);
+  const parent = parentId ? branchLeaves.find((item) => item.id === parentId) : undefined;
+  const kids = parent ? [] : branchLeaves.filter((item) => twigParent(item, branchLeaves) === task.id);
+  const plainLeaves = branchLeaves.filter((item) => !twigParent(item, branchLeaves) && item.id !== task.id).length;
+  // Big enough to stand on its own: as many leaves as the rest of the branch, or at least four.
+  const bigTwig = kids.length >= 4 || (kids.length >= 2 && kids.length >= plainLeaves);
+
+  const addKid = (e: React.FormEvent) => {
+    e.preventDefault();
+    const title = kidTitle.trim();
+    if (!title) return;
+    sproutLeaf(project.id, { title, parentTaskId: task.id });
+    setKidTitle('');
+  };
+
+  const promote = async () => {
+    const ok = await confirmAction(
+      `«${task.title}» pasará a ser una rama propia, saliendo del tronco junto a «${project.title}». ` +
+        `Sus ${kids.length} hoja${kids.length === 1 ? '' : 's'} y sus frutos se van con ella. ¿Seguimos?`
+    );
+    if (!ok) return;
+    const id = promoteTwig(task.id);
+    if (id) onPromoted(id);
+  };
 
   return createPortal(
     <section className={`lt-bench${show ? ' open' : ''}`} aria-label={`Banco de trabajo: ${task.title}`} aria-hidden={!show}>
       <button ref={closeRef} className="lt-x" onClick={onClose} aria-label="Cerrar">
         ×
       </button>
-      <p className="lt-crumb">Rama {project.title} · hoja</p>
+      <p className="lt-crumb">
+        Rama {project.title}
+        {parent ? (
+          <>
+            {' · ramita '}
+            <button className="lt-link" onClick={() => onOpenTask(parent.id)}>
+              {parent.title}
+            </button>
+          </>
+        ) : null}
+        {kids.length ? ' · ramita' : ' · hoja'}
+      </p>
       <h2>{task.title}</h2>
       <span className="lt-state">
         <i className="lt-dot" style={{ background: color }} />
@@ -111,6 +152,52 @@ const TaskBench: React.FC<TaskBenchProps> = ({ taskId, open, onClose, onSproutFr
           onBlur={() => link.trim() !== (task.link || '') && patchTask(task.id, { link: link.trim() })}
         />
       </label>
+
+      {!parent && (
+        <>
+          <h3>{kids.length ? 'Hojas de esta ramita' : 'Hacerla crecer'}</h3>
+          {kids.length ? (
+            <ul className="lt-list">
+              {kids.map((kid) => {
+                const [, kidColor] = leafState(kid);
+                return (
+                  <li key={kid.id} className={`lt-click${isDone(kid) ? ' done' : ''}`} tabIndex={0} onClick={() => onOpenTask(kid.id)} onKeyDown={(e) => e.key === 'Enter' && onOpenTask(kid.id)}>
+                    <i className="lt-dot" style={{ background: kidColor }} />
+                    <span className="nm">{kid.title}</span>
+                    <span className="dd">{isDone(kid) ? 'hecha' : when(kid.lastActivityAt)}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="lt-plain">Si esta tarea se divide en varias, dale hojas propias: crecerá como una ramita. Si se hace grande, podrás convertirla en rama.</p>
+          )}
+          <form className="lt-inline" onSubmit={addKid} style={{ display: 'flex', gap: 8 }}>
+            <input
+              className="lt-input"
+              value={kidTitle}
+              maxLength={80}
+              placeholder={kids.length ? 'Otra hoja para la ramita' : 'Primera hoja de la ramita'}
+              aria-label="Nueva hoja de la ramita"
+              onChange={(e) => setKidTitle(e.target.value)}
+              style={{ flex: 1 }}
+            />
+            <button className="lt-btn" type="submit" disabled={!kidTitle.trim()}>
+              Añadir
+            </button>
+          </form>
+          {kids.length > 0 && (
+            <>
+              {bigTwig && <p className="lt-note">Esta ramita ya crece tanto como la rama: quizá merece ser un proyecto propio.</p>}
+              <div className="lt-acts">
+                <button className={`lt-btn full${bigTwig ? ' sprout' : ''}`} onClick={promote}>
+                  Convertir la ramita en rama
+                </button>
+              </div>
+            </>
+          )}
+        </>
+      )}
 
       <h3>Frutos de esta hoja</h3>
       {fruits.length ? (

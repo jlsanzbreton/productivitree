@@ -6,8 +6,9 @@
 //! The only network call is reading a YouTube channel's public feed, on request.
 
 use std::fs;
-use std::io::ErrorKind;
-use std::path::PathBuf;
+use std::io::{ErrorKind, Write};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use tauri::{AppHandle, Emitter, Manager, WindowEvent};
 use tauri_plugin_deep_link::DeepLinkExt;
@@ -19,11 +20,86 @@ const BACKUP_FILE: &str = "productivitree.anterior.json";
 const MAIN_WINDOW: &str = "main";
 /// Event sent to the page when the quick-log shortcut (⌃⌥R) is pressed.
 const QUICK_LOG_EVENT: &str = "riego-rapido";
+/// Diagnostic log (errors, hangs, last actions). Stays on the Mac; the user decides whether to share it.
+const LOG_FILE: &str = "registro.log";
+const LOG_OLD: &str = "registro.anterior.log";
+const LOG_MAX_BYTES: u64 = 512 * 1024;
+/// Exists while the app runs; if it is still there at start, the last session did not end cleanly.
+const SESSION_MARKER: &str = "sesion-abierta";
+
+static PREVIOUS_SESSION_BROKEN: AtomicBool = AtomicBool::new(false);
 
 fn data_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     fs::create_dir_all(&dir).map_err(|e| format!("No puedo crear la carpeta de datos: {e}"))?;
     Ok(dir)
+}
+
+fn now_text() -> String {
+    // Seconds since 1970 (UTC); the page writes readable dates in its own lines.
+    let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    format!("t={secs}")
+}
+
+/// Appends text to the log, starting a new file (keeping one old copy) when it gets big.
+fn append_to_log(dir: &Path, text: &str) -> Result<(), String> {
+    let path = dir.join(LOG_FILE);
+    if fs::metadata(&path).map(|m| m.len() > LOG_MAX_BYTES).unwrap_or(false) {
+        let _ = fs::rename(&path, dir.join(LOG_OLD));
+    }
+    let mut file = fs::OpenOptions::new().create(true).append(true).open(&path).map_err(|e| e.to_string())?;
+    let mut text = text.to_string();
+    if !text.ends_with('\n') {
+        text.push('\n');
+    }
+    file.write_all(text.as_bytes()).map_err(|e| e.to_string())
+}
+
+/// Lines from the page: errors, hangs it noticed and the last things the user did.
+#[tauri::command]
+fn append_log(app: AppHandle, lines: String) -> Result<(), String> {
+    let lines: String = lines.chars().take(20_000).collect();
+    append_to_log(&data_dir(&app)?, &lines)
+}
+
+/// The whole log (previous file first), for Settings → copy and share it.
+#[tauri::command]
+fn read_log(app: AppHandle) -> Result<String, String> {
+    let dir = data_dir(&app)?;
+    let old = fs::read_to_string(dir.join(LOG_OLD)).unwrap_or_default();
+    let now = fs::read_to_string(dir.join(LOG_FILE)).unwrap_or_default();
+    Ok(format!("{old}{now}"))
+}
+
+#[tauri::command]
+fn log_location(app: AppHandle) -> Result<String, String> {
+    Ok(data_dir(&app)?.join(LOG_FILE).display().to_string())
+}
+
+/// True when the last session ended without quitting (hang, forced quit, restart).
+#[tauri::command]
+fn previous_session_broken() -> bool {
+    PREVIOUS_SESSION_BROKEN.load(Ordering::Relaxed)
+}
+
+fn start_session_log(dir: &Path) {
+    let marker = dir.join(SESSION_MARKER);
+    if let Ok(started) = fs::read_to_string(&marker) {
+        PREVIOUS_SESSION_BROKEN.store(true, Ordering::Relaxed);
+        let _ = append_to_log(
+            dir,
+            &format!("[aviso] La sesión anterior ({}) no se cerró bien: se colgó, se forzó la salida o se apagó el Mac.", started.trim()),
+        );
+    }
+    let _ = fs::write(&marker, now_text());
+    let _ = append_to_log(dir, &format!("[arranque] Productivitree {} ({})", env!("CARGO_PKG_VERSION"), now_text()));
+    // A crash inside the app's own code also leaves a line.
+    let dir = dir.to_path_buf();
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = append_to_log(&dir, &format!("[fallo] {info} ({})", now_text()));
+        previous(info);
+    }));
 }
 
 /// Reads the saved tree. `None` the first time the app runs.
@@ -145,8 +221,22 @@ pub fn run() {
                 })
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![load_state, save_state, data_location, open_external, fetch_youtube_feed, write_user_file])
+        .invoke_handler(tauri::generate_handler![
+            load_state,
+            save_state,
+            data_location,
+            open_external,
+            fetch_youtube_feed,
+            write_user_file,
+            append_log,
+            read_log,
+            log_location,
+            previous_session_broken
+        ])
         .setup(|app| {
+            if let Ok(dir) = data_dir(app.handle()) {
+                start_session_log(&dir);
+            }
             let handle = app.handle().clone();
             // The page reads the links itself (plugin JS API); here we only bring the window forward.
             app.deep_link().on_open_url(move |_event| show_main(&handle));
@@ -168,13 +258,20 @@ pub fn run() {
         .expect("error al arrancar Productivitree");
 
     app.run(|handle, event| {
+        // Quitting normally: the session ended cleanly.
+        if let tauri::RunEvent::Exit = event {
+            if let Ok(dir) = data_dir(handle) {
+                let _ = append_to_log(&dir, &format!("[salida] Cierre normal ({})", now_text()));
+                let _ = fs::remove_file(dir.join(SESSION_MARKER));
+            }
+        }
         // Clicking the Dock icon brings the hidden window back.
         #[cfg(target_os = "macos")]
         if let tauri::RunEvent::Reopen { .. } = event {
             show_main(handle);
         }
         #[cfg(not(target_os = "macos"))]
-        let _ = (handle, event);
+        let _ = handle;
     });
 }
 

@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom';
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import { desktopDataLocation } from '../../services/desktop';
+import { diagnosticsLocation, readDiagnostics } from '../../services/diagnostics';
 import { confirmAction } from '../../services/desktop';
 import { parseTreeJson } from '../../utils/treeJson';
 import '../LivingTree/livingTree.css';
@@ -27,6 +28,8 @@ const PrivacyModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOp
   const [pendingRestore, setPendingRestore] = useState<{ text: string; summary: BackupSummary } | null>(null);
   const [isRestoring, setIsRestoring] = useState(false);
   const [dataFile, setDataFile] = useState<string | null>(null);
+  const [logFile, setLogFile] = useState<string | null>(null);
+  const [logStatus, setLogStatus] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const formatDate = (iso: string | null) => (iso ? new Date(iso).toLocaleString('es-ES') : 'fecha desconocida');
 
@@ -36,6 +39,8 @@ const PrivacyModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOp
     setBackupError(null);
     setPendingRestore(null);
     desktopDataLocation().then(setDataFile);
+    diagnosticsLocation().then(setLogFile);
+    setLogStatus(null);
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -197,6 +202,37 @@ const PrivacyModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOp
           <div className="lt-msg" role="status">
             {status}
           </div>
+        )}
+
+        {logFile && (
+          <>
+            <h3>Registro de errores</h3>
+            <p className="lt-sub">
+              La app de Mac anota sus errores, los momentos en que se congela y lo último que hiciste antes. Se queda en tu Mac (
+              <code>{logFile}</code>). Si algo falla, cópialo y pégamelo para ver qué pasó.
+            </p>
+            <div className="lt-acts" style={{ marginTop: 0 }}>
+              <button
+                className="lt-btn full"
+                onClick={async () => {
+                  try {
+                    const text = await readDiagnostics();
+                    await navigator.clipboard.writeText(text || '(registro vacío)');
+                    setLogStatus(`Registro copiado (${text.split('\n').filter(Boolean).length} líneas).`);
+                  } catch {
+                    setLogStatus('No se pudo copiar el registro.');
+                  }
+                }}
+              >
+                Copiar el registro
+              </button>
+            </div>
+            {logStatus && (
+              <div className="lt-msg" role="status">
+                {logStatus}
+              </div>
+            )}
+          </>
         )}
 
         <h3>Comentarios</h3>
