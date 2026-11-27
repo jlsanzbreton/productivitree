@@ -1,5 +1,6 @@
 import { AppConnection, ProjectBranch, ProjectStageLeaf } from '../../types';
 import { fillUrlTemplate, isSafeOpenUrl } from '../../utils/activityLink';
+import { openDesktopLink } from '../../services/desktop';
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -46,6 +47,7 @@ export const continueUrl = (project: ProjectBranch, task: ProjectStageLeaf | nul
 
 export const openExternal = (url: string) => {
   if (!url || !isSafeOpenUrl(url)) return;
+  if (openDesktopLink(url)) return; // Mac app: the browser or the link's own app opens it
   if (/^https?:/i.test(url)) window.open(url, '_blank', 'noopener,noreferrer');
   else window.location.href = url; // app schemes such as bear:// open the app
 };

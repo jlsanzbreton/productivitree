@@ -259,3 +259,12 @@ ol.lt-tl .src { display: block; color: var(--lt-muted); font-size: 13px; }
 .lt-skin [class*='border-yellow'] { border-color: var(--lt-line) !important; }
 .lt-skin textarea, .lt-skin input[type='text'] { background: #fff !important; color: var(--lt-ink) !important; border: 1px solid var(--lt-line) !important; }
 .lt-skin svg { color: var(--lt-green) !important; }
+
+/* Quick watering (⌃⌥R in the Mac app) */
+.lt-quick-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 12px; max-height: 132px; overflow-y: auto; }
+.lt-quick-item {
+  font: inherit; font-size: 15px; padding: 5px 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--lt-line, #cfc8b4); background: transparent; color: inherit;
+}
+.lt-quick-item:hover { border-color: var(--lt-muted); }
+.lt-quick-item.on { background: #eef4e6; border-color: #b8cfa4; color: #2f5a1c; font-weight: 700; }

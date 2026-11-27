@@ -1,4 +1,4 @@
-const STORAGE_KEYS = {
+export const STORAGE_KEYS = {
   consolidatedState: 'productivitree-state',
   schemaVersion: 'productivitree-schema-version',
   legacyUser: 'productivitree-user',
@@ -110,6 +110,21 @@ export const loadPersistedState = (defaults) => {
 };
 
 let persistenceSuspended = false;
+let persistenceMirror = null;
+
+/**
+ * Extra place to keep every save, besides localStorage. The Mac app uses it to write
+ * the tree to a file. `mirror(json)` is called after each save; `mirror.flush()`, when
+ * present, resolves once pending writes are done.
+ */
+export const setPersistenceMirror = (mirror) => {
+  persistenceMirror = mirror;
+};
+
+/** Waits until the mirror (if any) has written the latest save. */
+export const flushPersistence = async () => {
+  if (persistenceMirror && typeof persistenceMirror.flush === 'function') await persistenceMirror.flush();
+};
 
 // Stops regular autosaves, e.g. while a backup restore is about to reload the page.
 export const suspendPersistence = () => {
@@ -120,7 +135,9 @@ export const savePersistedState = (state, options = {}) => {
   if (!hasWindow()) return;
   if (persistenceSuspended && !options.force) return;
   localStorage.setItem(STORAGE_KEYS.schemaVersion, String(state.schemaVersion));
-  localStorage.setItem(STORAGE_KEYS.consolidatedState, JSON.stringify(state));
+  const json = JSON.stringify(state);
+  localStorage.setItem(STORAGE_KEYS.consolidatedState, json);
+  if (persistenceMirror) persistenceMirror(json);
 };
 
 export const clearPersistedData = () => {

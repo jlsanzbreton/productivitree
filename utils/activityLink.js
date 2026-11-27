@@ -28,6 +28,23 @@ export const parseActivityParams = (search) => {
   };
 };
 
+/** Activity links for the Mac app: productivitree://actividad?rama=…&tarea=… */
+export const DESKTOP_ACTIVITY_ORIGIN = 'productivitree://actividad';
+
+/**
+ * Turns a productivitree:// link into the query string parseActivityParams reads.
+ * Returns null for links of other schemes or that do not carry an activity.
+ */
+export const activitySearchFromUrl = (url) => {
+  const text = String(url || '').trim();
+  const match = /^productivitree:\/\/([^/?#]*)\/?(\?[^#]*)?/i.exec(text);
+  if (!match) return null;
+  const params = new URLSearchParams(match[2] || '');
+  if (match[1].toLowerCase() === ACTIVITY_PARAM && !params.has(ACTIVITY_PARAM)) params.set(ACTIVITY_PARAM, '1');
+  if (!params.has(ACTIVITY_PARAM)) return null;
+  return `?${params.toString()}`;
+};
+
 /** Builds the activity link for a given app origin; placeholders stay for shortcuts to fill. */
 export const buildActivityLink = (origin, { branch = '{rama}', task = '{tarea}', app = '', note } = {}) => {
   const params = new URLSearchParams();

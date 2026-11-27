@@ -3,7 +3,8 @@ import React, { useContext, useEffect, useState } from 'react';
 import './livingTree.css';
 import { AppContext, AppContextType } from '../../contexts/AppContext';
 import { AppConnection, AppConnectionKind, AppTrackingMode } from '../../types';
-import { buildActivityLink, fillUrlTemplate, isSafeOpenUrl } from '../../utils/activityLink';
+import { DESKTOP_ACTIVITY_ORIGIN, buildActivityLink, fillUrlTemplate, isSafeOpenUrl } from '../../utils/activityLink';
+import { isDesktop } from '../../services/desktop';
 import { openExternal } from './treeHelpers';
 
 const PRESETS: Array<{ kind: AppConnectionKind; name: string; hint: string; url: string }> = [
@@ -38,7 +39,8 @@ const ConnectAppsWizard: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
 
   if (!isOpen) return null;
 
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://productivitree.app';
+  // In the Mac app, links go to the app itself (productivitree://), not to a web address.
+  const origin = isDesktop() ? DESKTOP_ACTIVITY_ORIGIN : typeof window !== 'undefined' ? window.location.origin : 'https://productivitree.app';
   const sample = projects[0];
   const activityLink = buildActivityLink(origin, { app: draft.name || 'Mi app' });
   const sampleLink = sample ? buildActivityLink(origin, { branch: sample.title, task: 'Nombre de la tarea', app: draft.name || 'Mi app' }) : '';

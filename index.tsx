@@ -4,6 +4,7 @@ import './index.css';
 import App from './App';
 import { AppProvider } from './contexts/AppContext';
 import AppErrorBoundary from './components/ErrorBoundary/AppErrorBoundary';
+import { startDesktopStorage } from './services/desktop';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -11,7 +12,8 @@ if (!rootElement) {
 }
 
 const root = ReactDOM.createRoot(rootElement);
-root.render(
+// In the Mac app the tree lives in a file: read it before the app starts.
+startDesktopStorage().finally(() => root.render(
   <React.StrictMode>
     <AppErrorBoundary>
       <AppProvider>
@@ -19,4 +21,4 @@ root.render(
       </AppProvider>
     </AppErrorBoundary>
   </React.StrictMode>
-);
+));
