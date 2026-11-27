@@ -1,7 +1,12 @@
 import React, { createContext, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AchievementData,
+  ActivityEntry,
+  AppConnection,
   AppPersistedState,
+  HistoryAction,
+  HistoryEntry,
+  HistoryKind,
   CorePurposeRoot,
   DataConsentSettings,
   LeafStatus,
@@ -40,6 +45,16 @@ import {
 } from '../utils/persistence';
 import { applyActivityBoost, applyHealthDecay, applyWaterBoost, deriveStageStatusFromNeglect } from '../utils/healthEngine';
 import { buildTreeData } from '../utils/treeBuilder';
+import { addActivityEntry, applyActivity } from '../utils/activityLink';
+import {
+  createBackupJson,
+  getLastBackupAt,
+  markBackupDone,
+  parseBackup,
+  requestPersistentStorage,
+  restoreBackup,
+} from '../services/backupService';
+import { backupFileName, summarizeBackup } from '../utils/backup';
 import { analyzeDraftNow, getAttemptHistory, getLatestResult, loadLatestDraft, saveDraft } from '../services/passionService';
 
 export interface AppContextType {
@@ -88,10 +103,10 @@ export interface AppContextType {
   updateTask: (task: ProjectStageLeaf) => void;
   deleteTask: (taskId: string) => void;
   completeTask: (taskId: string) => void;
-  addCoreRoot: (root: Omit<CorePurposeRoot, 'id' | 'userId' | 'createdAt'>) => void;
+  addCoreRoot: (root: Omit<CorePurposeRoot, 'id' | 'userId' | 'createdAt'>) => string;
   updateCoreRoot: (root: CorePurposeRoot) => void;
   deleteCoreRoot: (rootId: string) => void;
-  addTrunkSegment: (segment: Omit<SkillTrunkSegment, 'id' | 'userId' | 'createdAt'>) => void;
+  addTrunkSegment: (segment: Omit<SkillTrunkSegment, 'id' | 'userId' | 'createdAt'>) => string;
   updateTrunkSegment: (segment: SkillTrunkSegment) => void;
   deleteTrunkSegment: (segmentId: string) => void;
   addProjectBranch: (project: Omit<ProjectBranch, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => string;
@@ -106,13 +121,77 @@ export interface AppContextType {
   privacySettings: PrivacySettings;
   setPrivacySettings: React.Dispatch<React.SetStateAction<PrivacySettings>>;
   exportAllData: () => string;
+  downloadBackup: () => Promise<void>;
+  previewBackup: (text: string) => BackupSummary;
+  restoreFromBackup: (text: string) => Promise<void>;
+  lastBackupAt: string | null;
+  storagePersisted: boolean | null;
   resetDemoData: () => void;
   deleteAllData: () => void;
   schemaVersion: number;
   migrateToLatestSchema: () => void;
+  // Living tree
+  purpose: string;
+  setPurpose: (purpose: string) => void;
+  connections: AppConnection[];
+  saveConnection: (connection: Omit<AppConnection, 'id' | 'createdAt'> & { id?: string }) => string;
+  removeConnection: (connectionId: string) => void;
+  removeExampleParts: (parts: { purpose: boolean; rootIds: string[]; trunkIds: string[]; branchIds: string[]; appIds: string[] }) => void;
+  history: HistoryEntry[];
+  /** Everything, including archived (deleted) items. */
+  archive: { projects: ProjectBranch[]; stages: ProjectStageLeaf[]; achievements: AchievementData[] };
+  sproutBranch: (input: SproutBranchInput) => string;
+  sproutLeaf: (projectId: string, input: { title: string; link?: string; notes?: string }) => string;
+  sproutFruit: (projectId: string, input: { title: string; fromTaskId?: string; harvested?: boolean; link?: string }) => string;
+  setFruitHarvested: (fruitId: string, harvested: boolean) => void;
+  updateFruit: (fruitId: string, patch: Partial<Pick<AchievementData, 'title' | 'link' | 'description'>>) => void;
+  setBranchStatus: (projectId: string, status: ProjectBranch['status']) => void;
+  setTaskDone: (taskId: string, done: boolean) => void;
+  patchTask: (taskId: string, patch: Partial<Pick<ProjectStageLeaf, 'notes' | 'link' | 'title' | 'description'>>) => void;
+  logTaskWork: (taskId: string, text?: string) => void;
+  archiveItem: (kind: HistoryKind, id: string) => void;
+  restoreItem: (kind: HistoryKind, id: string) => void;
+  purgeItem: (kind: HistoryKind, id: string) => void;
+  recordExternalActivity: (activity: ExternalActivity) => { ok: boolean; message: string; projectId?: string; taskId?: string };
+  importTree: (data: ImportedTree, options?: { quiet?: boolean }) => void;
+}
+
+export interface SproutBranchInput {
+  title: string;
+  description?: string;
+  priorityLevel?: number;
+  appId?: string;
+  rootId?: string;
+  sproutedFrom?: string;
+}
+
+export interface ExternalActivity {
+  branch: string;
+  task?: string;
+  app?: string;
+  note?: string;
+  url?: string;
+}
+
+export interface ImportedTree {
+  purpose: string;
+  roots: CorePurposeRoot[];
+  trunkSegments: SkillTrunkSegment[];
+  projects: ProjectBranch[];
+  stages: ProjectStageLeaf[];
+  achievements: AchievementData[];
+  connections: AppConnection[];
+}
+
+export interface BackupSummary {
+  exportedAt: string | null;
+  projects: number;
+  stages: number;
+  roots: number;
 }
 
 const newId = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
+const MAX_HISTORY = 500;
 const toAttemptStatus = (value: unknown): PassionAnalysisStatus => {
   const allowed: PassionAnalysisStatus[] = [
     'queued_manual',
@@ -148,6 +227,8 @@ const buildDefaults = (): AppPersistedState => {
       localOnlyMode: true,
       analyticsEnabled: false,
     },
+    connections: [],
+    history: [],
   });
 };
 
@@ -181,6 +262,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [editingTask, setEditingTask] = useState<ProjectStageLeaf | null>(null);
   const [consent, setConsent] = useState<DataConsentSettings>(initial.consent);
   const [privacySettings, setPrivacySettings] = useState<PrivacySettings>(initial.privacy);
+  const [connections, setConnections] = useState<AppConnection[]>(initial.connections || []);
+  const [history, setHistory] = useState<HistoryEntry[]>(initial.history || []);
+  const [lastBackupAt, setLastBackupAt] = useState<string | null>(() => getLastBackupAt());
+  const [storagePersisted, setStoragePersisted] = useState<boolean | null>(null);
   const [passionDraftStatus, setPassionDraftStatus] = useState<PassionDraftStatus>({
     draftId: null,
     hasDraft: false,
@@ -189,16 +274,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     lastSavedAt: null,
   });
 
+  // Archived (deleted) items stay in state for the archive but are hidden everywhere else.
+  const liveProjects = useMemo(() => projects.filter((item) => !item.deletedAt), [projects]);
+  const liveTasks = useMemo(() => {
+    const live = new Set(liveProjects.map((item) => item.id));
+    return currentTasks.filter((item) => !item.deletedAt && (live.has(item.projectId) || !projects.some((p) => p.id === item.projectId)));
+  }, [currentTasks, liveProjects, projects]);
+  const liveAchievements = useMemo(() => {
+    const live = new Set(liveProjects.map((item) => item.id));
+    return achievements.filter((item) => !item.deletedAt && (!item.projectId || live.has(item.projectId)));
+  }, [achievements, liveProjects]);
+
   const treeData = useMemo(
     () =>
       buildTreeData({
         roots,
         trunkSegments,
-        projects,
-        stages: currentTasks,
-        achievements,
+        projects: liveProjects,
+        stages: liveTasks,
+        achievements: liveAchievements,
       }) as TreeNode,
-    [roots, trunkSegments, projects, currentTasks, achievements]
+    [roots, trunkSegments, liveProjects, liveTasks, liveAchievements]
   );
   const [treeDataState, setTreeData] = useState<TreeNode>(treeData);
 
@@ -218,8 +314,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [activeBackground, activeTreeTheme, treeSpecies]);
 
-  const persistState = useCallback(() => {
-    const payload: AppPersistedState = {
+  const persistedState = useMemo<AppPersistedState>(
+    () => ({
       schemaVersion: APP_SCHEMA_VERSION,
       user: currentUser,
       roots,
@@ -235,28 +331,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       passionTestResult,
       consent,
       privacy: privacySettings,
-    };
-    savePersistedState(payload);
-  }, [
-    currentUser,
-    roots,
-    trunkSegments,
-    projects,
-    currentTasks,
-    achievements,
-    activeBackground,
-    activeTreeTheme,
-    treeSpecies,
-    treeHealthState,
-    isOnboardingComplete,
-    passionTestResult,
-    consent,
-    privacySettings,
-  ]);
+      connections,
+      history,
+    }),
+    [
+      currentUser,
+      roots,
+      trunkSegments,
+      projects,
+      currentTasks,
+      achievements,
+      activeBackground,
+      activeTreeTheme,
+      treeSpecies,
+      treeHealthState,
+      isOnboardingComplete,
+      passionTestResult,
+      consent,
+      privacySettings,
+      connections,
+      history,
+    ]
+  );
+
+  const persistState = useCallback(() => {
+    savePersistedState(persistedState);
+  }, [persistedState]);
 
   useEffect(() => {
     persistState();
   }, [persistState]);
+
+  useEffect(() => {
+    let cancelled = false;
+    requestPersistentStorage().then((granted) => {
+      if (!cancelled) setStoragePersisted(granted);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const recordMeaningfulActivity = useCallback(() => {
     const nowIso = new Date().toISOString();
@@ -287,16 +401,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addCoreRoot = useCallback(
     (root: Omit<CorePurposeRoot, 'id' | 'userId' | 'createdAt'>) => {
+      const id = newId('root');
       setRoots((prev) => [
         ...prev,
         {
           ...root,
-          id: newId('root'),
+          id,
           userId: currentUser.id,
           createdAt: new Date().toISOString(),
         },
       ]);
       recordMeaningfulActivity();
+      return id;
     },
     [currentUser.id, recordMeaningfulActivity]
   );
@@ -315,16 +431,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addTrunkSegment = useCallback(
     (segment: Omit<SkillTrunkSegment, 'id' | 'userId' | 'createdAt'>) => {
+      const id = newId('trunk');
       setTrunkSegments((prev) => [
         ...prev,
         {
           ...segment,
-          id: newId('trunk'),
+          id,
           userId: currentUser.id,
           createdAt: new Date().toISOString(),
         },
       ]);
       recordMeaningfulActivity();
+      return id;
     },
     [currentUser.id, recordMeaningfulActivity]
   );
@@ -371,10 +489,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [recordMeaningfulActivity]
   );
 
-  const deleteProjectBranch = useCallback((projectId: string) => {
-    setProjects((prev) => prev.filter((item) => item.id !== projectId));
-    setCurrentTasks((prev) => prev.filter((item) => item.projectId !== projectId));
+  const logEvent = useCallback((kind: HistoryKind, entityId: string, title: string, action: HistoryAction, detail?: string) => {
+    const entry: HistoryEntry = { id: newId('log'), at: new Date().toISOString(), kind, entityId, title, action, ...(detail ? { detail } : {}) };
+    setHistory((prev) => [entry, ...prev].slice(0, MAX_HISTORY));
   }, []);
+
+  // Deleting sends a branch to the archive; its leaves and fruits go with it and come back on restore.
+  const deleteProjectBranch = useCallback(
+    (projectId: string) => {
+      const now = new Date().toISOString();
+      const project = projects.find((item) => item.id === projectId);
+      setProjects((prev) => prev.map((item) => (item.id === projectId ? { ...item, deletedAt: now } : item)));
+      if (project) logEvent('branch', projectId, project.title, 'deleted');
+    },
+    [logEvent, projects]
+  );
 
   const addTask = useCallback(
     (task: Omit<ProjectStageLeaf, 'id' | 'userId' | 'createdAt' | 'lastActivityAt'>) => {
@@ -414,9 +543,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [recordMeaningfulActivity]
   );
 
-  const deleteTask = useCallback((taskId: string) => {
-    setCurrentTasks((prev) => prev.filter((item) => item.id !== taskId));
-  }, []);
+  const deleteTask = useCallback(
+    (taskId: string) => {
+      const now = new Date().toISOString();
+      const task = currentTasks.find((item) => item.id === taskId);
+      setCurrentTasks((prev) => prev.map((item) => (item.id === taskId ? { ...item, deletedAt: now } : item)));
+      if (task) logEvent('leaf', taskId, task.title, 'deleted');
+    },
+    [currentTasks, logEvent]
+  );
 
   const completeTask = useCallback(
     (taskId: string) => {
@@ -433,19 +568,287 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             : item
         )
       );
+      const task = currentTasks.find((item) => item.id === taskId);
+      if (task) logEvent('leaf', taskId, task.title, 'completed');
+      recordMeaningfulActivity();
+    },
+    [currentTasks, logEvent, recordMeaningfulActivity]
+  );
+
+  const setPurpose = useCallback((purpose: string) => {
+    setCurrentUser((prev) => ({ ...prev, purpose }));
+  }, []);
+
+  const saveConnection = useCallback((connection: Omit<AppConnection, 'id' | 'createdAt'> & { id?: string }) => {
+    const id = connection.id || newId('app');
+    setConnections((prev) => {
+      const existing = prev.find((item) => item.id === id);
+      const next: AppConnection = { ...connection, id, createdAt: existing?.createdAt || new Date().toISOString() };
+      return existing ? prev.map((item) => (item.id === id ? next : item)) : [...prev, next];
+    });
+    return id;
+  }, []);
+
+  const removeConnection = useCallback((connectionId: string) => {
+    setConnections((prev) => prev.filter((item) => item.id !== connectionId));
+    setProjects((prev) => prev.map((item) => (item.appId === connectionId ? { ...item, appId: undefined } : item)));
+  }, []);
+
+  // Quietly removes the untouched parts of the first-run example tree (not logged: they were never the person's).
+  const removeExampleParts = useCallback(
+    (parts: { purpose: boolean; rootIds: string[]; trunkIds: string[]; branchIds: string[]; appIds: string[] }) => {
+      const drop = (ids: string[]) => (item: { id: string }) => !ids.includes(item.id);
+      if (parts.purpose) setCurrentUser((prev) => ({ ...prev, purpose: '' }));
+      setRoots((prev) => prev.filter(drop(parts.rootIds)));
+      setTrunkSegments((prev) => prev.filter(drop(parts.trunkIds)));
+      setProjects((prev) => prev.filter(drop(parts.branchIds)));
+      setCurrentTasks((prev) => prev.filter((item) => !parts.branchIds.includes(item.projectId)));
+      setAchievements((prev) => prev.filter((item) => !item.projectId || !parts.branchIds.includes(item.projectId)));
+      setConnections((prev) => prev.filter(drop(parts.appIds)));
+    },
+    []
+  );
+
+  const sproutBranch = useCallback(
+    (input: SproutBranchInput) => {
+      const id = addProjectBranch({
+        title: input.title,
+        description: input.description || '',
+        priorityLevel: input.priorityLevel || 3,
+        status: 'active',
+        ...(input.appId ? { appId: input.appId } : {}),
+        ...(input.rootId ? { rootId: input.rootId } : {}),
+        ...(input.sproutedFrom ? { sproutedFrom: input.sproutedFrom } : {}),
+      });
+      logEvent('branch', id, input.title, input.sproutedFrom ? 'sprouted' : 'created', input.sproutedFrom ? `del fruto ${input.sproutedFrom}` : undefined);
+      return id;
+    },
+    [addProjectBranch, logEvent]
+  );
+
+  const sproutLeaf = useCallback(
+    (projectId: string, input: { title: string; link?: string; notes?: string }) => {
+      const now = new Date().toISOString();
+      const id = newId('stage');
+      setCurrentTasks((prev) => [
+        ...prev,
+        {
+          id,
+          userId: currentUser.id,
+          projectId,
+          title: input.title,
+          description: '',
+          status: LeafStatus.Healthy,
+          priority: 3,
+          createdAt: now,
+          lastActivityAt: now,
+          ...(input.link ? { link: input.link } : {}),
+          ...(input.notes ? { notes: input.notes } : {}),
+        },
+      ]);
+      const project = projects.find((item) => item.id === projectId);
+      logEvent('leaf', id, input.title, 'created', project ? `en ${project.title}` : undefined);
+      recordMeaningfulActivity();
+      return id;
+    },
+    [currentUser.id, logEvent, projects, recordMeaningfulActivity]
+  );
+
+  const sproutFruit = useCallback(
+    (projectId: string, input: { title: string; fromTaskId?: string; harvested?: boolean; link?: string }) => {
+      const now = new Date().toISOString();
+      const id = newId('fruit');
+      const harvested = Boolean(input.harvested);
       setAchievements((prev) => [
         ...prev,
         {
-          id: newId('achievement'),
-          projectId: currentTasks.find((task) => task.id === taskId)?.projectId,
-          title: 'Milestone reached',
+          id,
+          projectId,
+          title: input.title,
           type: 'milestone',
           createdAt: now,
+          harvested,
+          ...(harvested ? { harvestedAt: now } : {}),
+          ...(input.fromTaskId ? { fromTaskId: input.fromTaskId } : {}),
+          ...(input.link ? { link: input.link } : {}),
         },
       ]);
+      const task = input.fromTaskId ? currentTasks.find((item) => item.id === input.fromTaskId) : undefined;
+      logEvent('fruit', id, input.title, harvested ? 'harvested' : 'created', task ? `de la hoja ${task.title}` : undefined);
+      recordMeaningfulActivity();
+      return id;
+    },
+    [currentTasks, logEvent, recordMeaningfulActivity]
+  );
+
+  const setFruitHarvested = useCallback(
+    (fruitId: string, harvested: boolean) => {
+      const now = new Date().toISOString();
+      const fruit = achievements.find((item) => item.id === fruitId);
+      setAchievements((prev) =>
+        prev.map((item) => (item.id === fruitId ? { ...item, harvested, harvestedAt: harvested ? now : undefined } : item))
+      );
+      if (fruit) logEvent('fruit', fruitId, fruit.title, harvested ? 'harvested' : 'reopened');
+    },
+    [achievements, logEvent]
+  );
+
+  const updateFruit = useCallback((fruitId: string, patch: Partial<Pick<AchievementData, 'title' | 'link' | 'description'>>) => {
+    setAchievements((prev) => prev.map((item) => (item.id === fruitId ? { ...item, ...patch } : item)));
+  }, []);
+
+  const setBranchStatus = useCallback(
+    (projectId: string, status: ProjectBranch['status']) => {
+      const project = projects.find((item) => item.id === projectId);
+      if (!project || project.status === status) return;
+      setProjects((prev) =>
+        prev.map((item) => (item.id === projectId ? { ...item, status, updatedAt: new Date().toISOString() } : item))
+      );
+      const action: HistoryAction =
+        status === 'paused' ? 'paused' : status === 'completed' ? 'completed' : project.status === 'paused' ? 'resumed' : 'reopened';
+      logEvent('branch', projectId, project.title, action);
+    },
+    [logEvent, projects]
+  );
+
+  const setTaskDone = useCallback(
+    (taskId: string, done: boolean) => {
+      if (done) {
+        completeTask(taskId);
+        return;
+      }
+      const now = new Date().toISOString();
+      const task = currentTasks.find((item) => item.id === taskId);
+      setCurrentTasks((prev) =>
+        prev.map((item) =>
+          item.id === taskId ? { ...item, status: LeafStatus.InProgress, completedAt: undefined, lastActivityAt: now } : item
+        )
+      );
+      if (task) logEvent('leaf', taskId, task.title, 'reopened');
+    },
+    [completeTask, currentTasks, logEvent]
+  );
+
+  const patchTask = useCallback(
+    (taskId: string, patch: Partial<Pick<ProjectStageLeaf, 'notes' | 'link' | 'title' | 'description'>>) => {
+      setCurrentTasks((prev) => prev.map((item) => (item.id === taskId ? { ...item, ...patch } : item)));
+    },
+    []
+  );
+
+  const logTaskWork = useCallback(
+    (taskId: string, text?: string) => {
+      const now = new Date().toISOString();
+      const entry: ActivityEntry = { id: newId('act'), at: now, source: 'Productivitree', text: text || 'Avance anotado a mano' };
+      setCurrentTasks((prev) =>
+        prev.map((item) =>
+          item.id === taskId
+            ? {
+                ...addActivityEntry(item, entry),
+                lastActivityAt: now,
+                status: item.status === LeafStatus.Completed ? LeafStatus.Completed : LeafStatus.InProgress,
+              }
+            : item
+        )
+      );
+      const task = currentTasks.find((item) => item.id === taskId);
+      if (task) {
+        setProjects((prev) => prev.map((item) => (item.id === task.projectId && item.status === 'paused' ? { ...item, status: 'active' } : item)));
+      }
       recordMeaningfulActivity();
     },
     [currentTasks, recordMeaningfulActivity]
+  );
+
+  const archiveItem = useCallback(
+    (kind: HistoryKind, id: string) => {
+      if (kind === 'branch') deleteProjectBranch(id);
+      else if (kind === 'leaf') deleteTask(id);
+      else {
+        const now = new Date().toISOString();
+        const fruit = achievements.find((item) => item.id === id);
+        setAchievements((prev) => prev.map((item) => (item.id === id ? { ...item, deletedAt: now } : item)));
+        if (fruit) logEvent('fruit', id, fruit.title, 'deleted');
+      }
+    },
+    [achievements, deleteProjectBranch, deleteTask, logEvent]
+  );
+
+  const restoreItem = useCallback(
+    (kind: HistoryKind, id: string) => {
+      const strip = <T extends { id: string; deletedAt?: string }>(list: T[]) =>
+        list.map((item) => {
+          if (item.id !== id) return item;
+          const { deletedAt: _deletedAt, ...rest } = item;
+          return rest as T;
+        });
+      const title =
+        kind === 'branch'
+          ? projects.find((item) => item.id === id)?.title
+          : kind === 'leaf'
+            ? currentTasks.find((item) => item.id === id)?.title
+            : achievements.find((item) => item.id === id)?.title;
+      if (kind === 'branch') setProjects((prev) => strip(prev));
+      else if (kind === 'leaf') setCurrentTasks((prev) => strip(prev));
+      else setAchievements((prev) => strip(prev));
+      if (title) logEvent(kind, id, title, 'restored');
+    },
+    [achievements, currentTasks, logEvent, projects]
+  );
+
+  const purgeItem = useCallback(
+    (kind: HistoryKind, id: string) => {
+      const title =
+        kind === 'branch'
+          ? projects.find((item) => item.id === id)?.title
+          : kind === 'leaf'
+            ? currentTasks.find((item) => item.id === id)?.title
+            : achievements.find((item) => item.id === id)?.title;
+      if (kind === 'branch') {
+        setProjects((prev) => prev.filter((item) => item.id !== id));
+        setCurrentTasks((prev) => prev.filter((item) => item.projectId !== id));
+        setAchievements((prev) => prev.filter((item) => item.projectId !== id));
+      } else if (kind === 'leaf') setCurrentTasks((prev) => prev.filter((item) => item.id !== id));
+      else setAchievements((prev) => prev.filter((item) => item.id !== id));
+      if (title) logEvent(kind, id, title, 'purged');
+    },
+    [achievements, currentTasks, logEvent, projects]
+  );
+
+  const recordExternalActivity = useCallback(
+    (activity: ExternalActivity) => {
+      const result = applyActivity(
+        {
+          projects: projects.filter((item) => !item.deletedAt),
+          stages: currentTasks,
+          userId: currentUser.id,
+          newId,
+        },
+        { task: '', app: '', note: '', url: '', ...activity }
+      );
+      if (!result.ok || !result.stages) return { ok: false, message: result.error || 'No se pudo anotar la actividad.' };
+      setCurrentTasks(result.stages as ProjectStageLeaf[]);
+      if (result.created && result.taskId) logEvent('leaf', result.taskId, activity.task || '', 'created', 'desde un enlace de actividad');
+      recordMeaningfulActivity();
+      return { ok: true, message: result.message || 'Actividad anotada.', projectId: result.projectId, taskId: result.taskId };
+    },
+    [currentTasks, currentUser.id, logEvent, projects, recordMeaningfulActivity]
+  );
+
+  const importTree = useCallback(
+    (data: ImportedTree, options?: { quiet?: boolean }) => {
+      setCurrentUser((prev) => ({ ...prev, purpose: data.purpose || prev.purpose }));
+      setRoots(data.roots);
+      setTrunkSegments(data.trunkSegments);
+      setProjects(data.projects);
+      setCurrentTasks(data.stages);
+      setAchievements(data.achievements);
+      setConnections(data.connections);
+      setIsOnboardingComplete(true);
+      if (options?.quiet) return;
+      logEvent('branch', 'import', `${data.projects.length} ramas`, 'imported', 'árbol importado desde JSON');
+    },
+    [logEvent]
   );
 
   const setAiReflectionConsent = useCallback((enabled: boolean) => {
@@ -593,42 +996,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [analyzePassionDraft, consent.aiReflectionConsent, savePassionDraft]
   );
 
-  const exportAllData = useCallback(
-    () =>
-      exportPersistedState({
-        schemaVersion: APP_SCHEMA_VERSION,
-        user: currentUser,
-        roots,
-        trunkSegments,
-        projects,
-        stages: currentTasks,
-        achievements,
-        activeBackground,
-        activeTreeTheme,
-        treeSpecies,
-        treeHealth: treeHealthState,
-        isOnboardingComplete,
-        passionTestResult,
-        consent,
-        privacy: privacySettings,
-      }),
-    [
-      currentUser,
-      roots,
-      trunkSegments,
-      projects,
-      currentTasks,
-      achievements,
-      activeBackground,
-      activeTreeTheme,
-      treeSpecies,
-      treeHealthState,
-      isOnboardingComplete,
-      passionTestResult,
-      consent,
-      privacySettings,
-    ]
-  );
+  const exportAllData = useCallback(() => exportPersistedState(persistedState), [persistedState]);
+
+  const downloadBackup = useCallback(async () => {
+    const now = new Date();
+    const json = await createBackupJson(persistedState, now);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = backupFileName(now);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setLastBackupAt(markBackupDone(now));
+  }, [persistedState]);
+
+  const previewBackup = useCallback((text: string): BackupSummary => summarizeBackup(parseBackup(text)), []);
+
+  const restoreFromBackup = useCallback(async (text: string) => {
+    const backup = parseBackup(text);
+    await restoreBackup(backup, APP_SCHEMA_VERSION);
+    window.location.reload();
+  }, []);
 
   const resetDemoData = useCallback(() => {
     const nextDefaults = buildDefaults();
@@ -643,6 +1034,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsOnboardingComplete(false);
     setConsent(nextDefaults.consent);
     setPrivacySettings(nextDefaults.privacy);
+    setConnections([]);
+    setHistory([]);
     setCurrentUser({ ...nextDefaults.user, id: currentUser.id });
   }, [currentUser.id]);
 
@@ -663,6 +1056,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsOnboardingComplete(nextDefaults.isOnboardingComplete);
     setConsent(nextDefaults.consent);
     setPrivacySettings(nextDefaults.privacy);
+    setConnections([]);
+    setHistory([]);
   }, []);
 
   const migrateToLatestSchema = useCallback(() => {
@@ -678,12 +1073,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setRoots,
         trunkSegments,
         setTrunkSegments,
-        projects,
+        projects: liveProjects,
         setProjects,
-        currentTasks,
+        currentTasks: liveTasks,
         setCurrentTasks,
-        achievements,
+        achievements: liveAchievements,
         setAchievements,
+        archive: { projects, stages: currentTasks, achievements },
         treeData: treeDataState,
         setTreeData,
         activeBackground,
@@ -735,10 +1131,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         privacySettings,
         setPrivacySettings,
         exportAllData,
+        downloadBackup,
+        previewBackup,
+        restoreFromBackup,
+        lastBackupAt,
+        storagePersisted,
         resetDemoData,
         deleteAllData,
         schemaVersion: APP_SCHEMA_VERSION,
         migrateToLatestSchema,
+        purpose: currentUser.purpose || '',
+        setPurpose,
+        connections,
+        saveConnection,
+        removeConnection,
+        removeExampleParts,
+        history,
+        sproutBranch,
+        sproutLeaf,
+        sproutFruit,
+        setFruitHarvested,
+        updateFruit,
+        setBranchStatus,
+        setTaskDone,
+        patchTask,
+        logTaskWork,
+        archiveItem,
+        restoreItem,
+        purgeItem,
+        recordExternalActivity,
+        importTree,
       }}
     >
       {children}
