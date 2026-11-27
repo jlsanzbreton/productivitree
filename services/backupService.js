@@ -1,6 +1,6 @@
 import { localDb } from './localDb.js';
 import { buildBackupPayload, parseBackup } from '../utils/backup.js';
-import { savePersistedState, suspendPersistence } from '../utils/persistence.js';
+import { flushPersistence, savePersistedState, suspendPersistence } from '../utils/persistence.js';
 
 const LAST_BACKUP_KEY = 'productivitree-last-backup-at';
 
@@ -55,6 +55,7 @@ export const restoreBackup = async (backup, schemaVersion) => {
     }
   );
   savePersistedState({ ...backup.data, schemaVersion }, { force: true });
+  await flushPersistence();
 };
 
 export { parseBackup };

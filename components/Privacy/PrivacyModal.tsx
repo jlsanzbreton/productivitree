@@ -1,5 +1,6 @@
 import { createPortal } from 'react-dom';
 import React, { useContext, useEffect, useRef, useState } from 'react';
+import { desktopDataLocation } from '../../services/desktop';
 import '../LivingTree/livingTree.css';
 import { AppContext, AppContextType, BackupSummary } from '../../contexts/AppContext';
 import { TESTER_FEEDBACK_URL } from '../../constants';
@@ -23,6 +24,7 @@ const PrivacyModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOp
   const [backupError, setBackupError] = useState<string | null>(null);
   const [pendingRestore, setPendingRestore] = useState<{ text: string; summary: BackupSummary } | null>(null);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [dataFile, setDataFile] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const formatDate = (iso: string | null) => (iso ? new Date(iso).toLocaleString('es-ES') : 'fecha desconocida');
 
@@ -31,6 +33,7 @@ const PrivacyModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOp
     setStatus(null);
     setBackupError(null);
     setPendingRestore(null);
+    desktopDataLocation().then(setDataFile);
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -152,6 +155,11 @@ const PrivacyModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOp
         )}
 
         <h3>Tus datos</h3>
+        {dataFile && (
+          <p className="lt-sub">
+            En esta app de Mac tu árbol se guarda en un archivo de tu ordenador, que no sale de él: <code>{dataFile}</code>
+          </p>
+        )}
         <div className="lt-acts" style={{ marginTop: 0 }}>
           <button className="lt-btn full" onClick={copyBackup}>
             Copiar todos los datos al portapapeles

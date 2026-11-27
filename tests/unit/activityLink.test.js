@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyActivity, buildActivityLink, fillUrlTemplate, isSafeOpenUrl, parseActivityParams } from '../../utils/activityLink.js';
+import { DESKTOP_ACTIVITY_ORIGIN, activitySearchFromUrl, applyActivity, buildActivityLink, fillUrlTemplate, isSafeOpenUrl, parseActivityParams } from '../../utils/activityLink.js';
 
 let n = 0;
 const newId = (p) => `${p}-${++n}`;
@@ -49,4 +49,16 @@ test('builds links and fills URL templates safely', () => {
   assert.equal(isSafeOpenUrl('javascript:alert(1)'), false);
   assert.equal(isSafeOpenUrl('bear://x'), true);
   assert.equal(isSafeOpenUrl('https://a.b'), true);
+});
+
+test('reads productivitree:// links from the Mac app', () => {
+  const search = activitySearchFromUrl('productivitree://actividad?rama=Storytelling&tarea=Cuento%207');
+  assert.equal(parseActivityParams(search).branch, 'Storytelling');
+  assert.equal(parseActivityParams(search).task, 'Cuento 7');
+  const built = buildActivityLink(DESKTOP_ACTIVITY_ORIGIN, { branch: 'Canal', task: 'Guion 3', app: 'Cue' });
+  assert.match(built, /^productivitree:\/\/actividad\/\?actividad=1/);
+  assert.equal(parseActivityParams(activitySearchFromUrl(built)).task, 'Guion 3');
+  assert.equal(activitySearchFromUrl('https://example.com/?actividad=1&rama=x'), null);
+  assert.equal(activitySearchFromUrl('productivitree://abrir'), null);
+  assert.ok(parseActivityParams(activitySearchFromUrl('productivitree://actividad')).error);
 });

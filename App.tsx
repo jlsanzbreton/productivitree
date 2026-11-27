@@ -1,11 +1,13 @@
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import Header from './components/Layout/Header';
 import LivingTreeView, { GuideState } from './components/LivingTree/LivingTreeView';
 import ArchiveView from './components/LivingTree/ArchiveView';
 import TreeDataDialog from './components/LivingTree/TreeDataDialog';
 import ConnectAppsWizard from './components/LivingTree/ConnectAppsWizard';
 import { EXAMPLE_TREE } from './components/LivingTree/exampleTree';
-import { parseActivityParams } from './utils/activityLink';
+import QuickWaterDialog from './components/LivingTree/QuickWaterDialog';
+import { activitySearchFromUrl, parseActivityParams } from './utils/activityLink';
+import { listenDesktopLinks, listenQuickLogShortcut } from './services/desktop';
 import { parseTreeJson } from './utils/treeJson';
 import { snapshotExample } from './utils/exampleGuide';
 import PassionTest from './components/PassionTest/PassionTest';
@@ -54,6 +56,7 @@ const App: React.FC = () => {
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [dataDialog, setDataDialog] = useState<{ text: string } | null>(null);
   const [showConnect, setShowConnect] = useState(false);
+  const [showQuickWater, setShowQuickWater] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [focusRequest, setFocusRequest] = useState<{ projectId: string; taskId?: string; nonce: number } | null>(null);
   const [viewMode, setViewMode] = useState<TreeViewMode>(readStoredViewMode);
@@ -97,21 +100,43 @@ const App: React.FC = () => {
   }, [isOnboardingComplete]);
 
   // Activity links (?actividad=1&rama=…&tarea=…) sent by shortcuts or connected apps.
-  useEffect(() => {
-    const activity = parseActivityParams(window.location.search);
+  // In the Mac app they arrive as productivitree://actividad?rama=…&tarea=…
+  const handleActivity = (search: string) => {
+    const activity = parseActivityParams(search);
     if (!activity) return;
-    window.history.replaceState(null, '', window.location.pathname + window.location.hash);
     if ('error' in activity) {
       setToast(activity.error || 'Enlace de actividad no válido.');
       return;
     }
-    const result = recordExternalActivity(activity);
+    showActivityResult(recordExternalActivity(activity));
+  };
+  const showActivityResult = (result: { ok: boolean; message: string; projectId?: string; taskId?: string }) => {
     setToast(result.message);
     if (result.ok && result.projectId) {
       changeViewMode('tree');
       setFocusRequest({ projectId: result.projectId, taskId: result.taskId, nonce: Date.now() });
     }
-    // Runs once on load.
+  };
+  // Latest handler for listeners registered once.
+  const handleActivityRef = useRef(handleActivity);
+  handleActivityRef.current = handleActivity;
+
+  useEffect(() => {
+    if (parseActivityParams(window.location.search)) {
+      const search = window.location.search;
+      window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+      handleActivity(search);
+    }
+    const stopLinks = listenDesktopLinks((url) => {
+      const search = activitySearchFromUrl(url);
+      if (search) handleActivityRef.current(search);
+    });
+    const stopShortcut = listenQuickLogShortcut(() => setShowQuickWater(true));
+    return () => {
+      stopLinks();
+      stopShortcut();
+    };
+    // Registered once on load.
   }, []);
 
   useEffect(() => {
@@ -176,6 +201,14 @@ const App: React.FC = () => {
         onClose={() => setDataDialog(null)}
       />
       <ConnectAppsWizard isOpen={showConnect} onClose={() => setShowConnect(false)} />
+      <QuickWaterDialog
+        isOpen={showQuickWater}
+        onClose={() => setShowQuickWater(false)}
+        onDone={(result) => {
+          setShowQuickWater(false);
+          showActivityResult(result);
+        }}
+      />
       {toast && (
         <div className="lt-toast" role="status">
           {toast}

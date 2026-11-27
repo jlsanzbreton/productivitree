@@ -18,12 +18,31 @@ Productivitree is a visual project-management app for creators and entrepreneurs
 1. `npm install`
 2. `npm run dev`
 
+## App de Mac (Tauri)
+La misma app, empaquetada para el Mac. Añade lo que una pestaña del navegador no puede hacer:
+- **Datos en un archivo local**: `~/Library/Application Support/app.productivitree.desktop/productivitree.json`
+  (con una copia de la versión anterior al lado). Nada sale del Mac.
+- **Enlaces de actividad** `productivitree://actividad?rama=…&tarea=…&app=…` que cualquier app
+  (o un Atajo de Apple) puede abrir para anotar trabajo.
+- **Riego manual con ⌃⌥R** desde cualquier app: abre «¿En qué has trabajado?».
+- Cerrar la ventana no cierra la app (el atajo y los enlaces siguen funcionando); ⌘Q la cierra.
+
+Requisitos: Rust (`rustup`) y las herramientas de Xcode, como en Memorice y Cue.
+1. `npm install`
+2. `npm run mac:dev` para probarla, o `npm run mac:build` para crear `Productivitree.app` y el `.dmg`
+   en `src-tauri/target/release/bundle/`.
+
+Los enlaces `productivitree://` solo funcionan con la app construida e instalada (macOS los asocia al
+abrirla una vez desde Aplicaciones). Para pasar tu árbol del navegador a la app: Ajustes → Copias de
+seguridad → descarga la copia en la web y restáurala en la app.
+
 ## Quality gates
 - `npm run typecheck`
 - `npm run lint`
 - `npm run test`
 - `npm run test:integration`
 - `npm run check`
+- `cd src-tauri && cargo test` (app de Mac)
 
 ## Netlify deployment
 - Config is in `netlify.toml`.
