@@ -136,3 +136,37 @@ export const listenQuickLogShortcut = (onPress: () => void): (() => void) => {
 
 /** Public feed (Atom XML) of a YouTube channel, read by the Mac app. */
 export const fetchYoutubeFeed = (channelId: string): Promise<string> => invoke<string>('fetch_youtube_feed', { channelId });
+
+/**
+ * Asks yes/no. window.confirm does nothing inside the Mac app's window (it answers "no"
+ * without showing anything), so there it uses the native macOS dialog.
+ */
+export const confirmAction = async (message: string): Promise<boolean> => {
+  if (!isDesktop()) return window.confirm(message);
+  const { ask } = await import('@tauri-apps/plugin-dialog');
+  return ask(message, { title: 'Productivitree', kind: 'warning', okLabel: 'Sí', cancelLabel: 'Cancelar' });
+};
+
+/**
+ * Saves a text file. In the browser it downloads it; in the Mac app (where downloads do
+ * not work) it opens the macOS save dialog. Returns false if the user cancelled.
+ */
+export const saveTextFile = async (name: string, text: string, type = 'application/json'): Promise<boolean> => {
+  if (isDesktop()) {
+    const { save } = await import('@tauri-apps/plugin-dialog');
+    const path = await save({ defaultPath: name, filters: [{ name: 'JSON', extensions: ['json'] }] });
+    if (!path) return false;
+    await invoke('write_user_file', { path, contents: text });
+    return true;
+  }
+  const blob = new Blob([text], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return true;
+};

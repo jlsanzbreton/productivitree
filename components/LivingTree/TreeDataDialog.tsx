@@ -1,22 +1,15 @@
 import { createPortal } from 'react-dom';
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import './livingTree.css';
 import { AppContext, AppContextType } from '../../contexts/AppContext';
 import { exportTreeJson, parseTreeJson } from '../../utils/treeJson';
 import { EXAMPLE_TREE } from './exampleTree';
+import { confirmAction, saveTextFile } from '../../services/desktop';
 
 type Parsed = ReturnType<typeof parseTreeJson>;
 
 const download = (name: string, text: string) => {
-  const blob = new Blob([text], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  saveTextFile(name, text).catch((error) => console.error('[Productivitree] No se pudo guardar', error));
 };
 
 /** Feed the whole tree from a simple JSON file, or take it out in the same format. */
@@ -33,15 +26,20 @@ const TreeDataDialog: React.FC<{ isOpen: boolean; onClose: () => void; initialTe
   const [parsed, setParsed] = useState<Parsed | null>(null);
   const [done, setDone] = useState('');
 
+  // onClose changes on every render of the parent: keep it out of the reset effect,
+  // or the "Árbol importado" message is wiped right after importing.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!isOpen) return undefined;
     setText(initialText);
     setParsed(initialText.trim() ? parseTreeJson(initialText, { userId: currentUser.id }) : null);
     setDone('');
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onCloseRef.current();
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isOpen, onClose, initialText]);
+  }, [isOpen, initialText]);
 
   if (!isOpen) return null;
 
@@ -62,10 +60,10 @@ const TreeDataDialog: React.FC<{ isOpen: boolean; onClose: () => void; initialTe
     download(`productivitree-arbol-${stamp}.json`, json);
   };
 
-  const apply = () => {
+  const apply = async () => {
     if (!parsed || !parsed.ok) return;
     const hasTree = projects.length > 0 && !skipConfirm;
-    if (hasTree && !window.confirm('Esto reemplaza tu árbol actual (ramas, hojas, frutos, pasiones, experiencia y apps). ¿Seguro? Si dudas, expórtalo antes.')) return;
+    if (hasTree && !(await confirmAction('Esto reemplaza tu árbol actual (ramas, hojas, frutos, pasiones, experiencia y apps). ¿Seguro? Si dudas, expórtalo antes.'))) return;
     importTree(parsed.data as Parameters<typeof importTree>[0]);
     setDone(`Árbol importado: ${parsed.summary.branches} ramas, ${parsed.summary.leaves} hojas y ${parsed.summary.fruits} frutos.`);
     setParsed(null);

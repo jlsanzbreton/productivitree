@@ -4,6 +4,7 @@ import '@fontsource/caveat/700.css';
 import './livingTree.css';
 import { AppContext, AppContextType } from '../../contexts/AppContext';
 import { ProjectBranch } from '../../types';
+import { confirmAction } from '../../services/desktop';
 import { buildLivingTreeModel, isFruit } from '../../utils/livingTreeModel';
 import { createLivingTree } from './livingTreeEngine';
 import TaskBench from './TaskBench';
@@ -355,7 +356,7 @@ const LivingTreeView: React.FC<LivingTreeViewProps> = ({ onOpenArchive, onOpenDa
           </button>
           <button
             className="lt-btn danger"
-            onClick={() => window.confirm(`¿Quitar la raíz «${passion.title}»?`) && (deleteCoreRoot(passion.id), setPanel('overview'))}
+            onClick={async () => (await confirmAction(`¿Quitar la raíz «${passion.title}»?`)) && (deleteCoreRoot(passion.id), setPanel('overview'))}
           >
             Quitar raíz
           </button>
@@ -538,7 +539,7 @@ const LivingTreeView: React.FC<LivingTreeViewProps> = ({ onOpenArchive, onOpenDa
           </button>
           <button
             className="lt-btn danger"
-            onClick={() => window.confirm(`¿Quitar «${experience.title}» del tronco?`) && (deleteTrunkSegment(experience.id), setPanel('overview'))}
+            onClick={async () => (await confirmAction(`¿Quitar «${experience.title}» del tronco?`)) && (deleteTrunkSegment(experience.id), setPanel('overview'))}
           >
             Quitar del tronco
           </button>

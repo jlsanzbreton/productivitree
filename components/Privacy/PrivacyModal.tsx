@@ -1,6 +1,8 @@
 import { createPortal } from 'react-dom';
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import { desktopDataLocation } from '../../services/desktop';
+import { confirmAction } from '../../services/desktop';
+import { parseTreeJson } from '../../utils/treeJson';
 import '../LivingTree/livingTree.css';
 import { AppContext, AppContextType, BackupSummary } from '../../contexts/AppContext';
 import { TESTER_FEEDBACK_URL } from '../../constants';
@@ -51,8 +53,8 @@ const PrivacyModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOp
   const handleDownloadBackup = async () => {
     setBackupError(null);
     try {
-      await downloadBackup();
-      setStatus('Copia descargada. Guárdala en un sitio seguro, por ejemplo iCloud Drive.');
+      if (!(await downloadBackup())) return;
+      setStatus('Copia guardada. Guárdala en un sitio seguro, por ejemplo iCloud Drive.');
     } catch (_error) {
       setBackupError('No se pudo crear el archivo de copia.');
     }
@@ -64,12 +66,28 @@ const PrivacyModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOp
     if (!file) return;
     setStatus(null);
     setBackupError(null);
+    let text = '';
     try {
-      const text = await file.text();
+      text = await file.text();
       setPendingRestore({ text, summary: previewBackup(text) });
     } catch (error) {
       setPendingRestore(null);
-      setBackupError(error instanceof Error ? error.message : 'No se pudo leer el archivo de copia.');
+      // A tree file (the simple JSON format) is not a backup: say where it goes.
+      let isTree = false;
+      try {
+        isTree = parseTreeJson(text).ok;
+      } catch {
+        isTree = false;
+      }
+      setBackupError(
+        isTree
+          ? 'Este archivo es un árbol, no una copia de seguridad. Cárgalo desde «Importar / exportar» en el panel del árbol.'
+          : error instanceof Error && /not valid JSON|does not look like/.test(error.message)
+            ? 'Este archivo no es una copia de seguridad de Productivitree.'
+            : error instanceof Error
+              ? error.message
+              : 'No se pudo leer el archivo de copia.'
+      );
     }
   };
 
@@ -166,8 +184,8 @@ const PrivacyModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOp
           </button>
           <button
             className="lt-btn danger full"
-            onClick={() => {
-              if (!window.confirm('Esto borra tu árbol y todos tus datos de este navegador, y vuelve a empezar con el árbol de ejemplo. ¿Seguro?')) return;
+            onClick={async () => {
+              if (!(await confirmAction('Esto borra tu árbol y todos tus datos, y vuelve a empezar con el árbol de ejemplo. ¿Seguro?'))) return;
               deleteAllData();
               onClose();
             }}

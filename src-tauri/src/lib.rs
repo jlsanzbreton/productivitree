@@ -52,6 +52,16 @@ fn save_state(app: AppHandle, json: String) -> Result<(), String> {
     fs::rename(&tmp, &path).map_err(|e| format!("No puedo guardar: {e}"))
 }
 
+/// Writes a file the user just chose in the save dialog (exports and backups).
+/// Only .json files: the page cannot use it to write anything else.
+#[tauri::command]
+fn write_user_file(path: String, contents: String) -> Result<(), String> {
+    if !path.to_ascii_lowercase().ends_with(".json") {
+        return Err("Solo se pueden guardar archivos .json.".into());
+    }
+    fs::write(&path, contents.as_bytes()).map_err(|e| format!("No se pudo guardar: {e}"))
+}
+
 /// Where the data file lives, to show it in Settings.
 #[tauri::command]
 fn data_location(app: AppHandle) -> Result<String, String> {
@@ -123,6 +133,7 @@ fn quick_log_shortcut() -> Shortcut {
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -134,7 +145,7 @@ pub fn run() {
                 })
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![load_state, save_state, data_location, open_external, fetch_youtube_feed])
+        .invoke_handler(tauri::generate_handler![load_state, save_state, data_location, open_external, fetch_youtube_feed, write_user_file])
         .setup(|app| {
             let handle = app.handle().clone();
             // The page reads the links itself (plugin JS API); here we only bring the window forward.

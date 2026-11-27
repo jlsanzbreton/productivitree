@@ -4,7 +4,7 @@ import './livingTree.css';
 import { AppContext, AppContextType } from '../../contexts/AppContext';
 import { AppConnection, AppConnectionKind, AppTrackingMode } from '../../types';
 import { DESKTOP_ACTIVITY_ORIGIN, buildActivityLink, fillUrlTemplate, isSafeOpenUrl } from '../../utils/activityLink';
-import { isDesktop } from '../../services/desktop';
+import { confirmAction, isDesktop } from '../../services/desktop';
 import { connectWritersLens, disconnectWritersLens, writersLensAccount, writersLensConfigured } from '../../services/writersLens';
 import { parseYoutubeChannelId } from '../../utils/sources';
 import { openExternal } from './treeHelpers';
@@ -170,7 +170,7 @@ const ConnectAppsWizard: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
                       <button
                         className="lt-link"
                         style={{ color: '#b8432f' }}
-                        onClick={() => window.confirm(`¿Quitar ${app.name}? Las ramas se quedan, solo pierden el enlace.`) && removeConnection(app.id)}
+                        onClick={async () => (await confirmAction(`¿Quitar ${app.name}? Las ramas se quedan, solo pierden el enlace.`)) && removeConnection(app.id)}
                       >
                         Quitar
                       </button>

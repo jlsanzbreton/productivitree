@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Permisos de la ventana principal de Productivitree",
   "windows": ["main"],
-  "permissions": ["core:default", "deep-link:default"]
+  "permissions": ["core:default", "deep-link:default", "dialog:allow-ask", "dialog:allow-message", "dialog:allow-save"]
 }
